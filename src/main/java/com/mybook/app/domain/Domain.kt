@@ -37,6 +37,8 @@ enum class Category(val label: String, val emoji: String) {
 
 /** Amounts are stored as Long minor units (e.g. paise/cents) to avoid floating point errors. */
 object Money {
+    const val DEFAULT_CURRENCY = "INR"
+
     fun format(amountMinor: Long, currencyCode: String): String {
         val currency = currencyOf(currencyCode)
         val digits = digits(currency)
@@ -64,9 +66,7 @@ object Money {
 
     fun isValidCurrency(code: String): Boolean = runCatching { Currency.getInstance(code) }.isSuccess
 
-    fun defaultCurrency(): String = runCatching { Currency.getInstance(Locale.getDefault()).currencyCode }.getOrDefault("INR")
-
-    private fun currencyOf(code: String): Currency = runCatching { Currency.getInstance(code) }.getOrElse { Currency.getInstance("INR") }
+    private fun currencyOf(code: String): Currency = runCatching { Currency.getInstance(code) }.getOrElse { Currency.getInstance(DEFAULT_CURRENCY) }
 
     private fun digits(currency: Currency) = currency.defaultFractionDigits.coerceAtLeast(0)
 }

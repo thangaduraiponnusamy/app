@@ -182,7 +182,7 @@ private fun BookCard(book: BookEntity, onClick: () -> Unit) {
 @Composable
 private fun CreateBookDialog(onDismiss: () -> Unit, onCreate: (String, String, String) -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
-    var currency by rememberSaveable { mutableStateOf(Money.defaultCurrency()) }
+    var currency by rememberSaveable { mutableStateOf(Money.DEFAULT_CURRENCY) }
     var members by rememberSaveable { mutableStateOf("Me") }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -205,7 +205,7 @@ private fun CreateBookDialog(onDismiss: () -> Unit, onCreate: (String, String, S
                     value = members,
                     onValueChange = { members = it.take(400) },
                     label = { Text("Members, comma separated") },
-                    supportingText = { Text("e.g. Me, Priya, Arun") },
+                    supportingText = { Text("e.g. Durai, Thanga") },
                 )
             }
         },
