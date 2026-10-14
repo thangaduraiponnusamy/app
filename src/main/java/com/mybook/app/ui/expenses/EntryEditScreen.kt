@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -69,6 +70,7 @@ import com.mybook.app.domain.MAX_TITLE
 import com.mybook.app.domain.Money
 import com.mybook.app.ui.common.ActionViewModel
 import com.mybook.app.ui.common.BackButton
+import com.mybook.app.ui.common.CategoryDialog
 import com.mybook.app.ui.common.MessageEffect
 import com.mybook.app.ui.common.ScreenHeader
 import com.mybook.app.ui.common.SquareIconButton
@@ -150,6 +152,12 @@ class EntryEditViewModel(
         receiptPath = null
     }
 
+    fun addCategory(name: String, emoji: String, color: Long) = action {
+        val created = repo.upsertCategory(null, categoryKind, name, emoji, color)
+        categoryId = created.id
+        message = "Added ${created.name}"
+    }
+
     fun save() = action {
         require(title.isNotBlank()) { "Enter a title" }
         val minor = Money.parse(amount) ?: throw IllegalArgumentException("Enter a valid amount in ₹")
@@ -194,6 +202,7 @@ fun EntryEditScreen(bookId: String, entryId: String?, kind: EntryKind, onDone: (
     val snackbar = remember { SnackbarHostState() }
     var showDatePicker by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var addingCategory by remember { mutableStateOf(false) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) vm.newReceipt = uri
     }
@@ -279,6 +288,16 @@ fun EntryEditScreen(bookId: String, entryId: String?, kind: EntryKind, onDone: (
                                 Text(category.name, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
                             }
                         }
+                        Row(
+                            Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(14.dp))
+                                .clickable { addingCategory = true }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("+ New", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
 
@@ -352,6 +371,17 @@ fun EntryEditScreen(bookId: String, entryId: String?, kind: EntryKind, onDone: (
             },
             dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } },
         ) { DatePicker(state = state) }
+    }
+
+    if (addingCategory) {
+        CategoryDialog(
+            existing = null,
+            onDismiss = { addingCategory = false },
+            onSave = { name, emoji, color ->
+                vm.addCategory(name, emoji, color)
+                addingCategory = false
+            },
+        )
     }
 
     if (confirmDelete) {

@@ -3,6 +3,7 @@ package com.mybook.app.ui.home
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -23,7 +24,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,7 +36,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,9 +54,13 @@ import com.mybook.app.ui.common.Hint
 import com.mybook.app.ui.common.PeriodBar
 import com.mybook.app.ui.common.SectionHeader
 import com.mybook.app.ui.common.TransactionRow
-import com.mybook.app.ui.theme.BlueGradient
+import com.mybook.app.ui.theme.BrandGradient
 import java.time.LocalDate
+import kotlin.math.atan2
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
+
+private const val RECENT_COUNT = 5
 
 @Composable
 fun DashboardTab(
@@ -75,23 +85,17 @@ fun DashboardTab(
     val income = inRange.filter { it.type == ExpenseType.INCOME }.sumOf { it.amountMinor }
     val spent = inRange.filter { it.type == ExpenseType.EXPENSE }.sumOf { it.amountMinor }
     val totals = remember(inRange, categoryMap) { Reports.byCategory(Reports.spending(inRange), categoryMap) }
+    val recent = entries.take(RECENT_COUNT)
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
-        item { BalanceCard(balance = income - spent, income = income, expenses = spent, brush = BlueGradient) }
+        item { BalanceCard(balance = income - spent, income = income, expenses = spent, brush = BrandGradient) }
         if (dueCount > 0) item { DueBanner(dueCount, onOpenAlerts) }
         item { PeriodBar(period, anchor, onPeriod, onAnchor) }
         item { SpendingCard("${period.label}ly Spending", spent, totals, onDetails) }
-        item { SectionHeader("Category usage") }
-        if (totals.isEmpty()) item { Hint("No spending in this period yet. Tap + to add an expense.") }
-        items(totals) { total ->
-            CategoryUsageRow(total, spent) { total.category?.let { onOpenCategory(it.id) } }
-        }
-        val recent = inRange.take(5)
-        if (recent.isNotEmpty()) {
-            item { SectionHeader("Recent transactions", action = "See all") { onOpenCategory("all") } }
-            items(recent, key = { it.id }) { entry ->
-                TransactionRow(entry, names, categoryMap) { onOpenEntry(entry.id) }
-            }
+        item { SectionHeader("Recent transactions", action = "See all") { onOpenCategory("all") } }
+        if (recent.isEmpty()) item { Hint("No transactions yet. Tap + to add your first expense.") }
+        items(recent, key = { it.id }) { entry ->
+            TransactionRow(entry, names, categoryMap) { onOpenEntry(entry.id) }
         }
     }
 }
@@ -112,7 +116,7 @@ internal fun BalanceCard(balance: Long, income: Long, expenses: Long, brush: Bru
         Spacer(Modifier.height(20.dp))
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
             BalanceFigure("↙  INCOME", Money.format(income), Modifier.weight(1f))
-            Box(Modifier.width(1.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.25f)))
+            Box(Modifier.width(1.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.3f)))
             BalanceFigure("↗  EXPENSES", Money.format(expenses), Modifier.weight(1f).padding(start = 20.dp))
         }
     }
@@ -121,7 +125,7 @@ internal fun BalanceCard(balance: Long, income: Long, expenses: Long, brush: Bru
 @Composable
 private fun BalanceFigure(label: String, value: String, modifier: Modifier) {
     Column(modifier) {
-        Text(label, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+        Text(label, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))
         Text(value, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
@@ -134,7 +138,7 @@ private fun DueBanner(count: Int, onClick: () -> Unit) {
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 6.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF3A2A0A))
+            .background(Color(0xFFFFF4D6))
             .clickable(onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -143,16 +147,17 @@ private fun DueBanner(count: Int, onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Text(
             if (count == 1) "1 payment is due. Tap to review." else "$count payments are due. Tap to review.",
-            color = Color(0xFFFCD34D),
+            color = Color(0xFF92400E),
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.weight(1f),
         )
-        Text("›", color = Color(0xFFFCD34D), style = MaterialTheme.typography.titleLarge)
+        Text("›", color = Color(0xFF92400E), style = MaterialTheme.typography.titleLarge)
     }
 }
 
 @Composable
 private fun SpendingCard(title: String, spent: Long, totals: List<CategoryTotal>, onDetails: () -> Unit) {
+    var selected by remember(totals) { mutableStateOf<Int?>(null) }
     Column(
         Modifier
             .fillMaxWidth()
@@ -173,15 +178,29 @@ private fun SpendingCard(title: String, spent: Long, totals: List<CategoryTotal>
         Spacer(Modifier.height(20.dp))
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             DonutChart(
-                slices = totals.map { Color(it.color) to it.amountMinor },
-                centerValue = Money.compact(spent),
-                modifier = Modifier.size(190.dp),
+                totals = totals,
+                spent = spent,
+                selected = selected,
+                onSelect = { index -> selected = if (index == selected) null else index },
+                modifier = Modifier.size(200.dp),
             )
         }
-        Spacer(Modifier.height(20.dp))
-        totals.take(6).chunked(2).forEach { pair ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                pair.forEach { total -> LegendItem(total, Modifier.weight(1f)) }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            if (totals.isEmpty()) "No spending in this period" else "Tap the circle or a category to see details",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+        totals.withIndex().toList().chunked(2).forEach { pair ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                pair.forEach { (index, total) ->
+                    LegendItem(total, index == selected, Modifier.weight(1f)) {
+                        selected = if (index == selected) null else index
+                    }
+                }
                 if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
@@ -189,32 +208,78 @@ private fun SpendingCard(title: String, spent: Long, totals: List<CategoryTotal>
 }
 
 @Composable
-private fun LegendItem(total: CategoryTotal, modifier: Modifier) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+private fun LegendItem(total: CategoryTotal, highlighted: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Row(
+        modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (highlighted) Color(total.color).copy(alpha = 0.15f) else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(Modifier.size(10.dp).background(Color(total.color), CircleShape))
         Spacer(Modifier.width(10.dp))
-        Text(total.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            total.name,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (highlighted) FontWeight.Bold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
+/** Spending donut; tapping a slice selects it and shows its category in the centre. */
 @Composable
-internal fun DonutChart(slices: List<Pair<Color, Long>>, centerValue: String, modifier: Modifier = Modifier, centerLabel: String = "SPENT") {
+private fun DonutChart(
+    totals: List<CategoryTotal>,
+    spent: Long,
+    selected: Int?,
+    onSelect: (Int?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val track = MaterialTheme.colorScheme.surfaceContainerHighest
+    val sum = totals.sumOf { it.amountMinor }
     Box(modifier, contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
+        Canvas(
+            Modifier
+                .fillMaxSize()
+                .pointerInput(totals) {
+                    detectTapGestures { tap ->
+                        if (sum <= 0L) return@detectTapGestures
+                        val dx = tap.x - size.width / 2f
+                        val dy = tap.y - size.height / 2f
+                        val radius = minOf(size.width, size.height) / 2f
+                        val distance = sqrt(dx * dx + dy * dy)
+                        if (distance < radius * 0.55f || distance > radius) {
+                            onSelect(null)
+                            return@detectTapGestures
+                        }
+                        var angle = Math.toDegrees(atan2(dy, dx).toDouble()).toFloat() + 90f
+                        if (angle < 0f) angle += 360f
+                        var end = 0f
+                        val index = totals.indexOfFirst { total ->
+                            end += 360f * total.amountMinor / sum
+                            angle <= end
+                        }
+                        onSelect(index.takeIf { it >= 0 })
+                    }
+                },
+        ) {
             val stroke = size.minDimension * 0.14f
-            val diameter = size.minDimension - stroke
+            val diameter = size.minDimension - stroke * 1.4f
             val topLeft = Offset((size.width - diameter) / 2, (size.height - diameter) / 2)
             val arcSize = Size(diameter, diameter)
-            val total = slices.sumOf { it.second }
-            if (total <= 0L) {
+            if (sum <= 0L) {
                 drawArc(color = track, startAngle = 0f, sweepAngle = 360f, useCenter = false, topLeft = topLeft, size = arcSize, style = Stroke(stroke))
                 return@Canvas
             }
-            val gap = if (slices.size > 1) 2f else 0f
+            val gap = if (totals.size > 1) 2f else 0f
             var start = -90f
-            slices.forEach { (color, value) ->
-                val sweep = 360f * value / total
+            totals.forEachIndexed { index, total ->
+                val sweep = 360f * total.amountMinor / sum
+                val isSelected = index == selected
+                val color = Color(total.color).copy(alpha = if (selected == null || isSelected) 1f else 0.3f)
                 drawArc(
                     color = color,
                     startAngle = start + gap / 2,
@@ -222,14 +287,23 @@ internal fun DonutChart(slices: List<Pair<Color, Long>>, centerValue: String, mo
                     useCenter = false,
                     topLeft = topLeft,
                     size = arcSize,
-                    style = Stroke(stroke),
+                    style = Stroke(if (isSelected) stroke * 1.35f else stroke),
                 )
                 start += sweep
             }
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(centerValue, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(centerLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 1.5.sp)
+        val current = selected?.let { totals.getOrNull(it) }
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 40.dp)) {
+            if (current == null) {
+                Text(Money.compact(spent), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("SPENT", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 1.5.sp)
+            } else {
+                val percent = if (sum > 0) (current.amountMinor * 100f / sum).roundToInt() else 0
+                Text(current.emoji, style = MaterialTheme.typography.titleLarge)
+                Text(current.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                Text(Money.compact(current.amountMinor), style = MaterialTheme.typography.titleMedium, color = Color(current.color), fontWeight = FontWeight.Bold)
+                Text("$percent%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

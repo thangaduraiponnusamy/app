@@ -6,6 +6,7 @@ import android.webkit.MimeTypeMap
 import androidx.room.withTransaction
 import com.mybook.app.domain.CsvExporter
 import com.mybook.app.domain.DefaultCategories
+import com.mybook.app.domain.MAX_NAME
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -72,7 +73,26 @@ class BookRepository(
         members.delete(member.id)
     }
 
-    suspend fun saveCategory(category: CategoryEntity) = categories.upsert(category)
+    /** Creates a category (when [existing] is null) or updates it; names must be unique per kind. */
+    suspend fun upsertCategory(existing: CategoryEntity?, kind: CategoryKind, name: String, emoji: String, color: Long): CategoryEntity {
+        val cleanName = name.trim().take(MAX_NAME)
+        require(cleanName.isNotEmpty()) { "Enter a category name" }
+        val all = categories.list()
+        require(all.none { it.kind == kind && it.id != existing?.id && it.name.equals(cleanName, ignoreCase = true) }) {
+            "$cleanName already exists"
+        }
+        val order = existing?.sortOrder ?: ((all.filter { it.kind == kind }.maxOfOrNull { it.sortOrder } ?: 0) + 1)
+        val category = CategoryEntity(
+            id = existing?.id ?: UUID.randomUUID().toString(),
+            name = cleanName,
+            emoji = emoji.trim().ifEmpty { "📌" },
+            color = color,
+            kind = kind,
+            sortOrder = order,
+        )
+        categories.upsert(category)
+        return category
+    }
 
     suspend fun deleteCategory(category: CategoryEntity) {
         val used = expenses.countForCategory(category.id) + reminders.countForCategory(category.id)

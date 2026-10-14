@@ -38,9 +38,9 @@ import com.mybook.app.domain.Money
 import com.mybook.app.domain.Reports
 import com.mybook.app.ui.common.Hint
 import com.mybook.app.ui.common.SectionHeader
-import com.mybook.app.ui.theme.BlueDeep
-import com.mybook.app.ui.theme.BlueGradient
-import com.mybook.app.ui.theme.BlueLight
+import com.mybook.app.ui.theme.BrandGradient
+import com.mybook.app.ui.theme.BrandPink
+import com.mybook.app.ui.theme.BrandViolet
 import java.time.LocalDate
 import kotlin.math.roundToInt
 
@@ -101,7 +101,7 @@ fun ReportsTab(entries: List<ExpenseEntity>, categories: List<CategoryEntity>, n
             }
         }
 
-        BalanceCard(balance = income - spent, income = income, expenses = spent, brush = BlueGradient, title = "Net savings")
+        BalanceCard(balance = income - spent, income = income, expenses = spent, brush = BrandGradient, title = "Net savings")
 
         when (mode) {
             ReportMode.YEAR -> {
@@ -114,7 +114,7 @@ fun ReportsTab(entries: List<ExpenseEntity>, categories: List<CategoryEntity>, n
                 SectionHeader("Spending by year (${years.first}–${years.last})")
                 BarChart(byYear, Modifier.padding(horizontal = 20.dp))
                 SectionHeader("Yearly totals")
-                BreakdownList(byYear.reversed().map { Triple(it.first, it.second, 0xFF3B82F6) }, spent)
+                BreakdownList(byYear.reversed().map { Triple(it.first, it.second, 0xFF6D5DFC) }, spent)
             }
             ReportMode.MONTH -> Unit
         }
@@ -125,7 +125,7 @@ fun ReportsTab(entries: List<ExpenseEntity>, categories: List<CategoryEntity>, n
             spent,
         )
         SectionHeader("Paid by")
-        BreakdownList(Reports.byPayer(spending, names).map { Triple(it.first, it.second, 0xFF60A5FA) }, spent)
+        BreakdownList(Reports.byPayer(spending, names).map { Triple(it.first, it.second, 0xFFF25F9C) }, spent)
     }
 }
 
@@ -134,7 +134,7 @@ private fun BarChart(entries: List<Pair<String, Long>>, modifier: Modifier = Mod
     if (entries.isEmpty()) return
     val max = entries.maxOf { it.second }.coerceAtLeast(1L)
     var selected by remember(entries) { mutableIntStateOf(entries.indices.maxBy { entries[it].second }) }
-    val active = Brush.verticalGradient(listOf(BlueLight, BlueDeep))
+    val active = Brush.verticalGradient(listOf(BrandPink, BrandViolet))
     val inactive = MaterialTheme.colorScheme.surfaceContainerHighest
     Column(
         modifier

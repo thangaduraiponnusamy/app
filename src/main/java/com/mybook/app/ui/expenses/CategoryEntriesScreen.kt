@@ -37,7 +37,7 @@ import com.mybook.app.ui.common.PeriodBar
 import com.mybook.app.ui.common.ScreenHeader
 import com.mybook.app.ui.common.TransactionRow
 import com.mybook.app.ui.common.appViewModel
-import com.mybook.app.ui.theme.BlueGradient
+import com.mybook.app.ui.theme.BrandGradient
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
@@ -99,7 +99,7 @@ private fun TotalCard(total: Long, count: Int) {
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 8.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(BlueGradient)
+            .background(BrandGradient)
             .padding(22.dp),
     ) {
         Text("Total", color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyMedium)

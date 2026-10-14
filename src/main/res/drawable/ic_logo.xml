@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- In-app logo: launcher artwork on a rounded blue gradient tile. -->
+<!-- In-app logo: launcher artwork on a rounded gradient tile. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="96dp"
@@ -14,8 +14,8 @@
                 android:startY="0"
                 android:endX="108"
                 android:endY="108">
-                <item android:offset="0" android:color="#FF60A5FA" />
-                <item android:offset="1" android:color="#FF1D4ED8" />
+                <item android:offset="0" android:color="#FF6D5DFC" />
+                <item android:offset="1" android:color="#FFF25F9C" />
             </gradient>
         </aapt:attr>
     </path>
@@ -28,15 +28,15 @@
             android:fillColor="#FFFFFFFF"
             android:pathData="M53,38 C46,33.5 37,33 30,35 L30,72 C37,70 46,70.5 53,75 Z" />
         <path
-            android:fillColor="#FFE0EAFF"
+            android:fillColor="#FFF3EEFF"
             android:pathData="M55,38 C62,33.5 71,33 78,35 L78,72 C71,70 62,70.5 55,75 Z" />
         <path
-            android:strokeColor="#FF60A5FA"
+            android:strokeColor="#FF8E7CFF"
             android:strokeWidth="2.2"
             android:strokeLineCap="round"
             android:pathData="M35,45 L48,46.5 M35,52 L48,53.5 M35,59 L44,60" />
         <path
-            android:strokeColor="#FF10B981"
+            android:strokeColor="#FFF25F9C"
             android:strokeWidth="2.6"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"

@@ -56,7 +56,7 @@ import com.mybook.app.ui.common.MessageEffect
 import com.mybook.app.ui.common.ScreenHeader
 import com.mybook.app.ui.common.SectionHeader
 import com.mybook.app.ui.common.appViewModel
-import com.mybook.app.ui.theme.BlueGradient
+import com.mybook.app.ui.theme.BrandGradient
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 
@@ -124,7 +124,7 @@ private fun Hero() {
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 8.dp)
             .clip(RoundedCornerShape(28.dp))
-            .background(BlueGradient)
+            .background(BrandGradient)
             .padding(24.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -154,7 +154,7 @@ private fun BookRow(book: BookEntity, onClick: () -> Unit) {
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(44.dp).background(BlueGradient, CircleShape), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(44.dp).background(BrandGradient, CircleShape), contentAlignment = Alignment.Center) {
             Text(book.name.take(1).uppercase(), color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.width(16.dp))

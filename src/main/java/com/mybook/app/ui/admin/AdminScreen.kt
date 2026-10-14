@@ -56,6 +56,7 @@ import com.mybook.app.domain.MAX_NAME
 import com.mybook.app.ui.common.ActionViewModel
 import com.mybook.app.ui.common.BackButton
 import com.mybook.app.ui.common.CategoryBadge
+import com.mybook.app.ui.common.CategoryDialog
 import com.mybook.app.ui.common.MessageEffect
 import com.mybook.app.ui.common.ScreenHeader
 import com.mybook.app.ui.common.SectionHeader
@@ -72,14 +73,8 @@ class AdminViewModel(private val bookId: String, container: AppContainer) : Acti
     val members = repo.observeMembers(bookId).stateIn(viewModelScope, started, emptyList())
 
     fun saveCategory(existing: CategoryEntity?, kind: CategoryKind, name: String, emoji: String, color: Long) = action {
-        val cleanName = name.trim().take(MAX_NAME)
-        require(cleanName.isNotEmpty()) { "Enter a category name" }
-        val cleanEmoji = emoji.trim().ifEmpty { "📌" }
-        val sameName = categories.value.any { it.kind == kind && it.id != existing?.id && it.name.equals(cleanName, ignoreCase = true) }
-        require(!sameName) { "$cleanName already exists" }
-        val order = existing?.sortOrder ?: ((categories.value.filter { it.kind == kind }.maxOfOrNull { it.sortOrder } ?: 0) + 1)
-        repo.saveCategory(CategoryEntity(existing?.id ?: UUID.randomUUID().toString(), cleanName, cleanEmoji, color, kind, order))
-        message = if (existing == null) "Added $cleanName" else "Updated $cleanName"
+        val saved = repo.upsertCategory(existing, kind, name, emoji, color)
+        message = if (existing == null) "Added ${saved.name}" else "Updated ${saved.name}"
     }
 
     fun deleteCategory(category: CategoryEntity) = action {
@@ -182,7 +177,7 @@ fun AdminScreen(bookId: String, onBack: () -> Unit) {
 
     editing?.let { edit ->
         CategoryDialog(
-            edit = edit,
+            existing = edit.existing,
             onDismiss = { editing = null },
             onSave = { name, emoji, color ->
                 vm.saveCategory(edit.existing, edit.kind, name, emoji, color)
@@ -208,52 +203,4 @@ fun AdminScreen(bookId: String, onBack: () -> Unit) {
             dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel") } },
         )
     }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun CategoryDialog(edit: CategoryEdit, onDismiss: () -> Unit, onSave: (String, String, Long) -> Unit) {
-    var name by rememberSaveable { mutableStateOf(edit.existing?.name.orEmpty()) }
-    var emoji by rememberSaveable { mutableStateOf(edit.existing?.emoji ?: "📌") }
-    var color by rememberSaveable { mutableStateOf(edit.existing?.color ?: CategoryPalette.first()) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (edit.existing == null) "New category" else "Edit category") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CategoryBadge(emoji.ifBlank { "📌" }, Color(color), size = 52.dp)
-                    Spacer(Modifier.width(12.dp))
-                    OutlinedTextField(
-                        value = emoji,
-                        onValueChange = { emoji = it.take(4) },
-                        label = { Text("Emoji") },
-                        singleLine = true,
-                        modifier = Modifier.width(110.dp),
-                    )
-                }
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it.take(MAX_NAME) },
-                    label = { Text("Name") },
-                    singleLine = true,
-                )
-                Text("Colour", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    CategoryPalette.forEach { option ->
-                        Box(
-                            Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(Color(option))
-                                .then(if (option == color) Modifier.border(3.dp, Color.White, CircleShape) else Modifier)
-                                .clickable { color = option },
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = { onSave(name, emoji, color) }, enabled = name.isNotBlank()) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
 }
