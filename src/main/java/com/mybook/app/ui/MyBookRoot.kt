@@ -22,7 +22,6 @@ import com.mybook.app.ui.expenses.EntryEditScreen
 import com.mybook.app.ui.expenses.EntryKind
 import com.mybook.app.ui.home.HomeNav
 import com.mybook.app.ui.home.HomeScreen
-import com.mybook.app.ui.sms.SmsImportScreen
 
 @Composable
 fun MyBookRoot() {
@@ -57,7 +56,6 @@ private fun BookNavHost(bookId: String) {
                     openAlerts = { nav.navigate("alerts") },
                     openAdmin = { nav.navigate("admin") },
                     openBalances = { nav.navigate("balances") },
-                    openSms = { nav.navigate("sms") },
                 ),
             )
         }
@@ -86,7 +84,6 @@ private fun BookNavHost(bookId: String) {
         composable("alerts") { AlertsScreen(bookId, onBack = back) }
         composable("admin") { AdminScreen(bookId, onBack = back) }
         composable("balances") { BalancesScreen(bookId, onBack = back) }
-        composable("sms") { SmsImportScreen(bookId, onBack = back) }
     }
 }
 

@@ -23,9 +23,6 @@ class Prefs(context: Context) {
     private val _activeBookId = MutableStateFlow(prefs.getString(KEY_ACTIVE_BOOK, null))
     val activeBookId: StateFlow<String?> = _activeBookId.asStateFlow()
 
-    private val _smsAutoAdd = MutableStateFlow(prefs.getBoolean(KEY_SMS_AUTO_ADD, false))
-    val smsAutoAdd: StateFlow<Boolean> = _smsAutoAdd.asStateFlow()
-
     private val _backupEmail = MutableStateFlow(prefs.getString(KEY_BACKUP_EMAIL, null))
     val backupEmail: StateFlow<String?> = _backupEmail.asStateFlow()
 
@@ -42,11 +39,6 @@ class Prefs(context: Context) {
     fun setActiveBook(id: String?) {
         prefs.edit().putString(KEY_ACTIVE_BOOK, id).apply()
         _activeBookId.value = id
-    }
-
-    fun setSmsAutoAdd(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_SMS_AUTO_ADD, enabled).apply()
-        _smsAutoAdd.value = enabled
     }
 
     fun setBackupEmail(email: String?) {
@@ -71,7 +63,6 @@ class Prefs(context: Context) {
 
     private companion object {
         const val KEY_ACTIVE_BOOK = "active_book"
-        const val KEY_SMS_AUTO_ADD = "sms_auto_add"
         const val KEY_BACKUP_EMAIL = "backup_email"
         const val KEY_BACKUP_FREQUENCY = "backup_frequency"
         const val KEY_LAST_BACKUP = "last_backup_at"

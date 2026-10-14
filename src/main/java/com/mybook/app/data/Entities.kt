@@ -77,10 +77,3 @@ data class ReminderEntity(
     val dueDate: LocalDate,
     val repeat: RepeatRule,
 )
-
-/** Remembers which bank SMS were already turned into entries, so they are never added twice. */
-@Entity(tableName = "sms_imports")
-data class SmsImportEntity(
-    @PrimaryKey val smsKey: String,
-    val importedAt: Long,
-)

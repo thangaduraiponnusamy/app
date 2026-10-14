@@ -1,7 +1,7 @@
 # MyBook – shared expense tracker (Android)
 
 Kotlin + Jetpack Compose app for tracking household, flatmate and trip expenses in **₹ INR**.
-Data lives on the phone (Room database), with optional **Google Drive backup** (like WhatsApp) and **bank SMS auto-tracking**.
+Data lives on the phone (Room database), with optional **Google Drive backup** (like WhatsApp).
 
 - Package: `com.mybook.app` · minSdk 26 · targetSdk 35
 - Repo: https://github.com/thangaduraiponnusamy/app (APK built by GitHub Actions)
@@ -39,13 +39,6 @@ Data lives on the phone (Room database), with optional **Google Drive backup** (
 - The bell shows a **badge** when something is due today or overdue.
 - **Mark paid** records an expense and moves the reminder to its next due date.
 - In-app only (no system notifications yet).
-
-### Bank SMS auto-tracking (☰ menu → Bank SMS auto-tracking)
-- **Scan inbox** (7 / 30 / 90 days) → review detected debits/credits with checkboxes → **Add selected**.
-- **Auto-add switch**: new bank/UPI SMS are added to the open book as they arrive.
-- Parser: Indian bank/UPI formats (`Rs`, `INR`, `₹`; debited/spent/credited…), guesses merchant and category by keywords (Swiggy → Food, Uber → Transport…).
-- Ignores OTPs, due-date alerts, collect requests, failed/declined/pending messages.
-- Each SMS is imported only once. SMS **never leave the phone**.
 
 ### Admin page (☰ menu → Admin)
 - **Google Drive backup** (see below).
@@ -117,18 +110,16 @@ The workflow `.github/workflows/build-apk.yml` runs on every push to `main` or m
 
 ```
 src/main/java/com/mybook/app/
-  MyBookApp.kt              App + AppContainer (manual DI: prefs, repository, smsReader, backupManager)
+  MyBookApp.kt              App + AppContainer (manual DI: prefs, repository, backupManager)
   MainActivity.kt           Edge-to-edge, light system bars
   data/
-    Entities.kt             Book, Member, Category, Expense (type EXPENSE/SETTLEMENT/INCOME), Reminder, SmsImport
-    Daos.kt, MyBookDatabase.kt   Room v3 (migration 2→3 adds sms_imports; others destructive)
-    BookRepository.kt       All data operations (books, members, categories, entries, reminders, SMS import, CSV)
-    Prefs.kt                Active book, SMS auto-add, backup account/frequency/last time, device-only restore flag
-    Sms.kt                  SmsReader (inbox query) + SmsReceiver (SMS_RECEIVED → auto-add)
+    Entities.kt             Book, Member, Category, Expense (type EXPENSE/SETTLEMENT/INCOME), Reminder
+    Daos.kt, MyBookDatabase.kt   Room v4 (migrations 2→4 no-op, 3→4 drops the old sms_imports table; others destructive)
+    BookRepository.kt       All data operations (books, members, categories, entries, reminders, CSV)
+    Prefs.kt                Active book, backup account/frequency/last time, device-only restore flag
     backup/DriveBackup.kt   GoogleDriveAuth, DriveBackupClient (REST, appDataFolder), BackupManager (zip/restore/schedule), BackupWorker
   domain/
     Domain.kt               Money (INR, en-IN format, compact ₹3.2k/₹1.2L), DefaultCategories, Period, Balances, Reports, CsvExporter
-    SmsParser.kt            Bank/UPI SMS → SmsTransaction
   ui/
     MyBookRoot.kt           RestoreGate → Books list or per-book NavHost
     theme/Theme.kt          Light lavender (#F7F5FF), violet→pink gradient, white cards
@@ -140,17 +131,16 @@ src/main/java/com/mybook/app/
     balances/               Balances & settle up
     admin/                  Admin (backup, categories, members)
     backup/                 BackupSection (Admin), RestoreGate (startup restore prompt)
-    sms/                    SmsImportScreen
 ```
 
 ### Navigation routes (per book)
-`home` · `entry/{EXPENSE|INCOME}/{id|new}?category={id}` · `category/{id|all}` · `alerts` · `admin` · `balances` · `sms`
+`home` · `entry/{EXPENSE|INCOME}/{id|new}?category={id}` · `category/{id|all}` · `alerts` · `admin` · `balances`
 
 ---
 
 ## Limitations / ideas for next steps
-- Payment reminders and SMS auto-add are in-app only: no system notifications yet (add WorkManager + POST_NOTIFICATIONS).
-- SMS permissions are fine for sideloaded APKs. A Play Store release would need Google's SMS permission declaration.
+- Payment reminders are in-app only: no system notifications yet (add WorkManager + POST_NOTIFICATIONS).
+- Bank SMS reading was tried and removed: Play Protect blocks sideloaded apps that request SMS permissions.
 - No multi-phone live sharing (each phone has its own data; Drive backup is per Google account).
-- Database migrations: only 2→3 is migrated; other schema changes reset data (POC).
+- Database migrations: 2→4 and 3→4 are migrated; other schema changes reset data (POC).
 - Split is equal shares only (no custom amounts or percentages yet).

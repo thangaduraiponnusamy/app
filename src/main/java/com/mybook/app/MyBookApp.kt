@@ -5,7 +5,6 @@ import android.content.Context
 import com.mybook.app.data.BookRepository
 import com.mybook.app.data.MyBookDatabase
 import com.mybook.app.data.Prefs
-import com.mybook.app.data.SmsReader
 import com.mybook.app.data.backup.BackupManager
 import com.mybook.app.data.backup.DriveBackupClient
 import com.mybook.app.data.backup.GoogleDriveAuth
@@ -37,7 +36,6 @@ class AppContainer(context: Context) {
         prefs = prefs,
         receiptsDir = File(appContext.filesDir, "receipts"),
     )
-    val smsReader = SmsReader(appContext)
     val backupManager = BackupManager(appContext, database, prefs, GoogleDriveAuth(appContext), DriveBackupClient())
 
     init {

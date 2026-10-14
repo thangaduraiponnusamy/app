@@ -71,7 +71,6 @@ data class HomeNav(
     val openAlerts: () -> Unit,
     val openAdmin: () -> Unit,
     val openBalances: () -> Unit,
-    val openSms: () -> Unit,
 )
 
 class HomeViewModel(private val bookId: String, private val container: AppContainer) : ActionViewModel() {
@@ -147,7 +146,6 @@ fun HomeScreen(bookId: String, nav: HomeNav) {
                             DropdownMenuItem(text = { Text("All books") }, onClick = { menuOpen = false; vm.switchBook() })
                             DropdownMenuItem(text = { Text("Balances & settle up") }, onClick = { menuOpen = false; nav.openBalances() })
                             DropdownMenuItem(text = { Text("Payment reminders") }, onClick = { menuOpen = false; nav.openAlerts() })
-                            DropdownMenuItem(text = { Text("Bank SMS auto-tracking") }, onClick = { menuOpen = false; nav.openSms() })
                             DropdownMenuItem(text = { Text("Admin · categories, members & backup") }, onClick = { menuOpen = false; nav.openAdmin() })
                             DropdownMenuItem(
                                 text = { Text("Export to CSV (Excel)") },

@@ -31,9 +31,8 @@ class Converters {
         CategoryEntity::class,
         ExpenseEntity::class,
         ReminderEntity::class,
-        SmsImportEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -43,19 +42,22 @@ abstract class MyBookDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
     abstract fun expenseDao(): ExpenseDao
     abstract fun reminderDao(): ReminderDao
-    abstract fun smsImportDao(): SmsImportDao
 
     companion object {
-        private val MIGRATION_2_3 = object : Migration(2, 3) {
+        // v3 briefly added an SMS import table; v4 removes it again.
+        private val MIGRATION_2_4 = object : Migration(2, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) = Unit
+        }
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("CREATE TABLE IF NOT EXISTS `sms_imports` (`smsKey` TEXT NOT NULL, `importedAt` INTEGER NOT NULL, PRIMARY KEY(`smsKey`))")
+                db.execSQL("DROP TABLE IF EXISTS `sms_imports`")
             }
         }
 
         // POC: schema changes without a migration reset local data.
         fun create(context: Context): MyBookDatabase =
             Room.databaseBuilder(context, MyBookDatabase::class.java, "mybook.db")
-                .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_2_4, MIGRATION_3_4)
                 .fallbackToDestructiveMigration()
                 .build()
     }

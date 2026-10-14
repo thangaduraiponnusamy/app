@@ -106,12 +106,3 @@ interface ReminderDao {
     @Query("DELETE FROM reminders WHERE bookId = :bookId")
     suspend fun deleteForBook(bookId: String)
 }
-
-@Dao
-interface SmsImportDao {
-    @Query("SELECT smsKey FROM sms_imports WHERE smsKey IN (:keys)")
-    suspend fun existing(keys: List<String>): List<String>
-
-    @Upsert
-    suspend fun upsert(entry: SmsImportEntity)
-}
