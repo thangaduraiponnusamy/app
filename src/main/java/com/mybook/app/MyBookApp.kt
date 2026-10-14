@@ -5,6 +5,10 @@ import android.content.Context
 import com.mybook.app.data.BookRepository
 import com.mybook.app.data.MyBookDatabase
 import com.mybook.app.data.Prefs
+import com.mybook.app.data.SmsReader
+import com.mybook.app.data.backup.BackupManager
+import com.mybook.app.data.backup.DriveBackupClient
+import com.mybook.app.data.backup.GoogleDriveAuth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,14 +30,18 @@ class AppContainer(context: Context) {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val prefs = Prefs(appContext)
+    private val database = MyBookDatabase.create(appContext)
     val repository = BookRepository(
         context = appContext,
-        db = MyBookDatabase.create(appContext),
+        db = database,
         prefs = prefs,
         receiptsDir = File(appContext.filesDir, "receipts"),
     )
+    val smsReader = SmsReader(appContext)
+    val backupManager = BackupManager(appContext, database, prefs, GoogleDriveAuth(appContext), DriveBackupClient())
 
     init {
         appScope.launch { repository.ensureDefaultCategories() }
+        backupManager.applySchedule()
     }
 }

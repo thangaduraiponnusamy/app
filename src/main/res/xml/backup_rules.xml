@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android Auto Backup (API 30 and below). The device-only prefs must not be restored. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="mybook_device.xml" />
+</full-backup-content>

@@ -16,6 +16,9 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE id = :id")
     suspend fun get(id: String): BookEntity?
 
+    @Query("SELECT COUNT(*) FROM books")
+    suspend fun count(): Int
+
     @Upsert
     suspend fun upsert(book: BookEntity)
 
@@ -102,4 +105,13 @@ interface ReminderDao {
 
     @Query("DELETE FROM reminders WHERE bookId = :bookId")
     suspend fun deleteForBook(bookId: String)
+}
+
+@Dao
+interface SmsImportDao {
+    @Query("SELECT smsKey FROM sms_imports WHERE smsKey IN (:keys)")
+    suspend fun existing(keys: List<String>): List<String>
+
+    @Upsert
+    suspend fun upsert(entry: SmsImportEntity)
 }

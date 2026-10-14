@@ -6,12 +6,15 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.mybook.app.MyBookApp
 import com.mybook.app.ui.admin.AdminScreen
 import com.mybook.app.ui.alerts.AlertsScreen
+import com.mybook.app.ui.backup.RestoreGate
 import com.mybook.app.ui.balances.BalancesScreen
 import com.mybook.app.ui.books.BooksScreen
 import com.mybook.app.ui.expenses.CategoryEntriesScreen
@@ -19,16 +22,19 @@ import com.mybook.app.ui.expenses.EntryEditScreen
 import com.mybook.app.ui.expenses.EntryKind
 import com.mybook.app.ui.home.HomeNav
 import com.mybook.app.ui.home.HomeScreen
+import com.mybook.app.ui.sms.SmsImportScreen
 
 @Composable
 fun MyBookRoot() {
-    val container = (LocalContext.current.applicationContext as MyBookApp).container
-    val activeBookId by container.prefs.activeBookId.collectAsStateWithLifecycle()
-    val bookId = activeBookId
-    if (bookId == null) {
-        BooksScreen()
-    } else {
-        key(bookId) { BookNavHost(bookId) }
+    RestoreGate {
+        val container = (LocalContext.current.applicationContext as MyBookApp).container
+        val activeBookId by container.prefs.activeBookId.collectAsStateWithLifecycle()
+        val bookId = activeBookId
+        if (bookId == null) {
+            BooksScreen()
+        } else {
+            key(bookId) { BookNavHost(bookId) }
+        }
     }
 }
 
@@ -36,27 +42,35 @@ fun MyBookRoot() {
 private fun BookNavHost(bookId: String) {
     val nav = rememberNavController()
     val back: () -> Unit = { nav.popIfPossible() }
+    val addEntry: (EntryKind, String?) -> Unit = { kind, categoryId ->
+        nav.navigate("entry/${kind.name}/new" + (categoryId?.let { "?category=$it" } ?: ""))
+    }
     NavHost(navController = nav, startDestination = "home") {
         composable("home") {
             HomeScreen(
                 bookId = bookId,
                 nav = HomeNav(
-                    addExpense = { nav.navigate("entry/${EntryKind.EXPENSE.name}/new") },
-                    addIncome = { nav.navigate("entry/${EntryKind.INCOME.name}/new") },
+                    addExpense = { addEntry(EntryKind.EXPENSE, null) },
+                    addIncome = { addEntry(EntryKind.INCOME, null) },
                     openEntry = { id -> nav.navigate("entry/${EntryKind.EXPENSE.name}/$id") },
                     openCategory = { id -> nav.navigate("category/$id") },
                     openAlerts = { nav.navigate("alerts") },
                     openAdmin = { nav.navigate("admin") },
                     openBalances = { nav.navigate("balances") },
+                    openSms = { nav.navigate("sms") },
                 ),
             )
         }
-        composable("entry/{kind}/{id}") { entry ->
+        composable(
+            "entry/{kind}/{id}?category={category}",
+            arguments = listOf(navArgument("category") { type = NavType.StringType; nullable = true; defaultValue = null }),
+        ) { entry ->
             val kind = EntryKind.entries.firstOrNull { it.name == entry.arguments?.getString("kind") } ?: EntryKind.EXPENSE
             EntryEditScreen(
                 bookId = bookId,
                 entryId = entry.arguments?.getString("id")?.takeIf { it != "new" },
                 kind = kind,
+                initialCategoryId = entry.arguments?.getString("category"),
                 onDone = back,
             )
         }
@@ -66,11 +80,13 @@ private fun BookNavHost(bookId: String) {
                 categoryId = entry.arguments?.getString("id")?.takeIf { it != "all" },
                 onBack = back,
                 onOpenEntry = { id -> nav.navigate("entry/${EntryKind.EXPENSE.name}/$id") },
+                onAdd = addEntry,
             )
         }
         composable("alerts") { AlertsScreen(bookId, onBack = back) }
         composable("admin") { AdminScreen(bookId, onBack = back) }
         composable("balances") { BalancesScreen(bookId, onBack = back) }
+        composable("sms") { SmsImportScreen(bookId, onBack = back) }
     }
 }
 

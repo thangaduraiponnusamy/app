@@ -41,6 +41,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -91,6 +92,7 @@ class EntryEditViewModel(
     private val bookId: String,
     private val entryId: String?,
     kind: EntryKind,
+    private val initialCategoryId: String?,
     container: AppContainer,
 ) : ActionViewModel() {
     private val repo = container.repository
@@ -107,6 +109,7 @@ class EntryEditViewModel(
     var date by mutableStateOf(LocalDate.now())
     var paidBy by mutableStateOf("")
     var splitWith by mutableStateOf(setOf<String>())
+    var splitEnabled by mutableStateOf(false)
     var note by mutableStateOf("")
     var receiptPath by mutableStateOf<String?>(null)
     var newReceipt by mutableStateOf<Uri?>(null)
@@ -131,13 +134,15 @@ class EntryEditViewModel(
                 date = entry.date
                 paidBy = entry.paidBy
                 splitWith = entry.splitWith.toSet()
+                splitEnabled = entry.type == ExpenseType.EXPENSE && entry.splitWith.toSet() != setOf(entry.paidBy)
                 note = entry.note
                 receiptPath = entry.receiptPath
             } else {
                 val ids = repo.listMembers(bookId).map { it.id }
                 paidBy = ids.firstOrNull().orEmpty()
                 splitWith = if (type == ExpenseType.INCOME) emptySet() else ids.toSet()
-                categoryId = repo.listCategories().firstOrNull { it.kind == categoryKind }?.id.orEmpty()
+                val ofKind = repo.listCategories().filter { it.kind == categoryKind }
+                categoryId = (ofKind.firstOrNull { it.id == initialCategoryId } ?: ofKind.firstOrNull())?.id.orEmpty()
             }
             loaded = true
         }
@@ -162,7 +167,12 @@ class EntryEditViewModel(
         require(title.isNotBlank()) { "Enter a title" }
         val minor = Money.parse(amount) ?: throw IllegalArgumentException("Enter a valid amount in ₹")
         require(paidBy.isNotEmpty()) { if (type == ExpenseType.INCOME) "Select who received it" else "Select who paid" }
-        require(type == ExpenseType.INCOME || splitWith.isNotEmpty()) { "Select who shares this expense" }
+        val shares = when {
+            type == ExpenseType.INCOME -> emptyList()
+            type == ExpenseType.SETTLEMENT || splitEnabled -> splitWith.sorted()
+            else -> listOf(paidBy)
+        }
+        require(type == ExpenseType.INCOME || shares.isNotEmpty()) { "Select who shares this expense" }
         require(type == ExpenseType.SETTLEMENT || categoryId.isNotEmpty()) { "Choose a category" }
         val base = existing
         val finalReceipt = newReceipt?.let { repo.importReceipt(it) } ?: receiptPath
@@ -176,7 +186,7 @@ class EntryEditViewModel(
                 categoryId = categoryId,
                 date = date,
                 paidBy = paidBy,
-                splitWith = if (type == ExpenseType.INCOME) emptyList() else splitWith.sorted(),
+                splitWith = shares,
                 type = type,
                 note = note.trim(),
                 receiptPath = finalReceipt,
@@ -195,8 +205,8 @@ class EntryEditViewModel(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun EntryEditScreen(bookId: String, entryId: String?, kind: EntryKind, onDone: () -> Unit) {
-    val vm = appViewModel { EntryEditViewModel(bookId, entryId, kind, it) }
+fun EntryEditScreen(bookId: String, entryId: String?, kind: EntryKind, initialCategoryId: String?, onDone: () -> Unit) {
+    val vm = appViewModel { EntryEditViewModel(bookId, entryId, kind, initialCategoryId, it) }
     val members by vm.members.collectAsStateWithLifecycle()
     val categories by vm.categories.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -308,8 +318,8 @@ fun EntryEditScreen(bookId: String, entryId: String?, kind: EntryKind, onDone: (
                     }
                 }
 
-                if (!isIncome) {
-                    Label(if (isSettlement) "Paid to" else "Split equally between")
+                if (isSettlement) {
+                    Label("Paid to")
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         members.forEach { member ->
                             FilterChip(
@@ -317,6 +327,30 @@ fun EntryEditScreen(bookId: String, entryId: String?, kind: EntryKind, onDone: (
                                 onClick = { vm.toggleSplit(member.id) },
                                 label = { Text(member.name) },
                             )
+                        }
+                    }
+                } else if (!isIncome && members.size > 1) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Split with others", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Off = only the payer's own expense",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(checked = vm.splitEnabled, onCheckedChange = { vm.splitEnabled = it })
+                    }
+                    if (vm.splitEnabled) {
+                        Label("Split equally between")
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            members.forEach { member ->
+                                FilterChip(
+                                    selected = member.id in vm.splitWith,
+                                    onClick = { vm.toggleSplit(member.id) },
+                                    label = { Text(member.name) },
+                                )
+                            }
                         }
                     }
                 }

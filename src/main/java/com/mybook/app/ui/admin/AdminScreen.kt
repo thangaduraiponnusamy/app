@@ -53,6 +53,7 @@ import com.mybook.app.data.CategoryKind
 import com.mybook.app.data.MemberEntity
 import com.mybook.app.domain.CategoryPalette
 import com.mybook.app.domain.MAX_NAME
+import com.mybook.app.ui.backup.BackupSection
 import com.mybook.app.ui.common.ActionViewModel
 import com.mybook.app.ui.common.BackButton
 import com.mybook.app.ui.common.CategoryBadge
@@ -111,10 +112,12 @@ fun AdminScreen(bookId: String, onBack: () -> Unit) {
     MessageEffect(vm, snackbar)
 
     Scaffold(
-        topBar = { ScreenHeader("Admin", "Categories & members", navigation = { BackButton(onBack) }) },
+        topBar = { ScreenHeader("Admin", "Backup, categories & members", navigation = { BackButton(onBack) }) },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 32.dp)) {
+            item { SectionHeader("Backup") }
+            item { BackupSection(snackbar) }
             CategoryKind.entries.forEach { kind ->
                 item {
                     SectionHeader(

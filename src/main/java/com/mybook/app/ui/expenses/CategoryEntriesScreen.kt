@@ -9,6 +9,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -28,6 +33,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.mybook.app.AppContainer
+import com.mybook.app.data.CategoryKind
 import com.mybook.app.data.ExpenseType
 import com.mybook.app.domain.Money
 import com.mybook.app.domain.Period
@@ -53,7 +59,13 @@ class CategoryEntriesViewModel(bookId: String, container: AppContainer) : ViewMo
 
 /** Entries of one category, or all expenses when [categoryId] is null. */
 @Composable
-fun CategoryEntriesScreen(bookId: String, categoryId: String?, onBack: () -> Unit, onOpenEntry: (String) -> Unit) {
+fun CategoryEntriesScreen(
+    bookId: String,
+    categoryId: String?,
+    onBack: () -> Unit,
+    onOpenEntry: (String) -> Unit,
+    onAdd: (EntryKind, String?) -> Unit,
+) {
     val vm = appViewModel { CategoryEntriesViewModel(bookId, it) }
     val entries by vm.entries.collectAsStateWithLifecycle()
     val categories by vm.categories.collectAsStateWithLifecycle()
@@ -80,8 +92,18 @@ fun CategoryEntriesScreen(bookId: String, categoryId: String?, onBack: () -> Uni
                 navigation = { BackButton(onBack) },
             )
         },
+        floatingActionButton = {
+            val kind = if (category?.kind == CategoryKind.INCOME) EntryKind.INCOME else EntryKind.EXPENSE
+            FloatingActionButton(
+                onClick = { onAdd(kind, category?.id) },
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = "Add to ${category?.name ?: "expenses"}", tint = Color.White)
+            }
+        },
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 32.dp)) {
+        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 96.dp)) {
             item { PeriodBar(period, anchor, { period = it }, { anchor = it }) }
             item { TotalCard(total, visible.size) }
             if (visible.isEmpty()) item { Hint("Nothing recorded in this period.") }

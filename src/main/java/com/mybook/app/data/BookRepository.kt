@@ -7,6 +7,7 @@ import androidx.room.withTransaction
 import com.mybook.app.domain.CsvExporter
 import com.mybook.app.domain.DefaultCategories
 import com.mybook.app.domain.MAX_NAME
+import com.mybook.app.domain.SmsTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -25,6 +26,7 @@ class BookRepository(
     private val categories get() = db.categoryDao()
     private val expenses get() = db.expenseDao()
     private val reminders get() = db.reminderDao()
+    private val smsImports get() = db.smsImportDao()
 
     fun observeBooks(): Flow<List<BookEntity>> = books.observeAll()
     fun observeBook(id: String): Flow<BookEntity?> = books.observe(id)
@@ -33,6 +35,7 @@ class BookRepository(
     fun observeExpenses(bookId: String): Flow<List<ExpenseEntity>> = expenses.observe(bookId)
     fun observeReminders(bookId: String): Flow<List<ReminderEntity>> = reminders.observe(bookId)
     suspend fun getBook(id: String): BookEntity? = books.get(id)
+    suspend fun hasBooks(): Boolean = books.count() > 0
     suspend fun listMembers(bookId: String): List<MemberEntity> = members.list(bookId)
     suspend fun listCategories(): List<CategoryEntity> = categories.list()
     suspend fun getExpense(id: String): ExpenseEntity? = expenses.get(id)
@@ -137,9 +140,9 @@ class BookRepository(
 
     suspend fun deleteReminder(reminder: ReminderEntity) = reminders.delete(reminder.id)
 
-    /** Records the reminder as an expense split between all members, then moves it to its next due date. */
+    /** Records the reminder as an expense paid by the first member, then moves it to its next due date. */
     suspend fun payReminder(reminder: ReminderEntity) {
-        val memberIds = members.list(reminder.bookId).map { it.id }
+        val payer = members.list(reminder.bookId).firstOrNull()?.id.orEmpty()
         val now = System.currentTimeMillis()
         db.withTransaction {
             expenses.upsert(
@@ -150,8 +153,8 @@ class BookRepository(
                     amountMinor = reminder.amountMinor,
                     categoryId = reminder.categoryId,
                     date = LocalDate.now(),
-                    paidBy = memberIds.firstOrNull().orEmpty(),
-                    splitWith = memberIds,
+                    paidBy = payer,
+                    splitWith = listOf(payer),
                     type = ExpenseType.EXPENSE,
                     note = "Paid from reminder",
                     receiptPath = null,
@@ -165,6 +168,47 @@ class BookRepository(
                 reminders.upsert(reminder.copy(dueDate = reminder.repeat.next(reminder.dueDate)))
             }
         }
+    }
+
+    suspend fun importedSmsKeys(keys: List<String>): Set<String> =
+        keys.chunked(500).flatMap { smsImports.existing(it) }.toSet()
+
+    /** Adds detected bank transactions to [bookId], skipping SMS that were imported before. Returns how many were added. */
+    suspend fun importSmsTransactions(bookId: String, transactions: List<SmsTransaction>): Int {
+        val payer = members.list(bookId).firstOrNull()?.id ?: return 0
+        val allCategories = categories.list()
+        val done = importedSmsKeys(transactions.map { it.key })
+        var added = 0
+        db.withTransaction {
+            transactions.filter { it.key !in done }.distinctBy { it.key }.forEach { t ->
+                val kind = if (t.type == ExpenseType.INCOME) CategoryKind.INCOME else CategoryKind.EXPENSE
+                val ofKind = allCategories.filter { it.kind == kind }
+                val category = t.categoryHint?.let { hint -> ofKind.firstOrNull { it.name.equals(hint, ignoreCase = true) } }
+                    ?: ofKind.firstOrNull { it.name.startsWith("Other", ignoreCase = true) }
+                    ?: ofKind.firstOrNull()
+                val now = System.currentTimeMillis()
+                expenses.upsert(
+                    ExpenseEntity(
+                        id = UUID.randomUUID().toString(),
+                        bookId = bookId,
+                        title = t.title,
+                        amountMinor = t.amountMinor,
+                        categoryId = category?.id.orEmpty(),
+                        date = t.date,
+                        paidBy = payer,
+                        splitWith = if (t.type == ExpenseType.INCOME) emptyList() else listOf(payer),
+                        type = t.type,
+                        note = "Added from bank SMS",
+                        receiptPath = null,
+                        createdAt = now,
+                        updatedAt = now,
+                    ),
+                )
+                smsImports.upsert(SmsImportEntity(t.key, now))
+                added++
+            }
+        }
+        return added
     }
 
     /** Copies a picked image into private app storage. */
