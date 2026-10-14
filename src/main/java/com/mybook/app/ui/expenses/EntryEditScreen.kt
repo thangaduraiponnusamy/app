@@ -4,6 +4,8 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,18 +23,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -41,7 +42,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,21 +52,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.mybook.app.AppContainer
+import com.mybook.app.data.CategoryKind
 import com.mybook.app.data.ExpenseEntity
 import com.mybook.app.data.ExpenseType
-import com.mybook.app.domain.Category
 import com.mybook.app.domain.MAX_NOTE
 import com.mybook.app.domain.MAX_TITLE
 import com.mybook.app.domain.Money
 import com.mybook.app.ui.common.ActionViewModel
+import com.mybook.app.ui.common.BackButton
 import com.mybook.app.ui.common.MessageEffect
+import com.mybook.app.ui.common.ScreenHeader
+import com.mybook.app.ui.common.SquareIconButton
 import com.mybook.app.ui.common.appViewModel
 import com.mybook.app.ui.common.display
 import kotlinx.coroutines.flow.SharingStarted
@@ -78,19 +83,25 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
 
-class ExpenseEditViewModel(
+enum class EntryKind { EXPENSE, INCOME }
+
+class EntryEditViewModel(
     private val bookId: String,
-    private val expenseId: String?,
+    private val entryId: String?,
+    kind: EntryKind,
     container: AppContainer,
 ) : ActionViewModel() {
     private val repo = container.repository
+    private val started = SharingStarted.WhileSubscribed(5_000)
 
-    val members = repo.observeMembers(bookId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    val book = repo.observeBook(bookId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val members = repo.observeMembers(bookId).stateIn(viewModelScope, started, emptyList())
+    val categories = repo.observeCategories().stateIn(viewModelScope, started, emptyList())
 
+    var type by mutableStateOf(if (kind == EntryKind.INCOME) ExpenseType.INCOME else ExpenseType.EXPENSE)
+        private set
     var title by mutableStateOf("")
     var amount by mutableStateOf("")
-    var category by mutableStateOf(Category.FOOD)
+    var categoryId by mutableStateOf("")
     var date by mutableStateOf(LocalDate.now())
     var paidBy by mutableStateOf("")
     var splitWith by mutableStateOf(setOf<String>())
@@ -104,24 +115,27 @@ class ExpenseEditViewModel(
     var finished by mutableStateOf(false)
         private set
 
+    val categoryKind: CategoryKind get() = if (type == ExpenseType.INCOME) CategoryKind.INCOME else CategoryKind.EXPENSE
+
     init {
         viewModelScope.launch {
-            val currency = repo.getBook(bookId)?.currency ?: "INR"
-            val expense = expenseId?.let { repo.getExpense(it) }?.takeIf { it.bookId == bookId }
-            if (expense != null) {
-                existing = expense
-                title = expense.title
-                amount = Money.toPlain(expense.amountMinor, currency)
-                category = Category.from(expense.category)
-                date = expense.date
-                paidBy = expense.paidBy
-                splitWith = expense.splitWith.toSet()
-                note = expense.note
-                receiptPath = expense.receiptPath
+            val entry = entryId?.let { repo.getExpense(it) }?.takeIf { it.bookId == bookId }
+            if (entry != null) {
+                existing = entry
+                type = entry.type
+                title = entry.title
+                amount = Money.toPlain(entry.amountMinor)
+                categoryId = entry.categoryId
+                date = entry.date
+                paidBy = entry.paidBy
+                splitWith = entry.splitWith.toSet()
+                note = entry.note
+                receiptPath = entry.receiptPath
             } else {
                 val ids = repo.listMembers(bookId).map { it.id }
                 paidBy = ids.firstOrNull().orEmpty()
-                splitWith = ids.toSet()
+                splitWith = if (type == ExpenseType.INCOME) emptySet() else ids.toSet()
+                categoryId = repo.listCategories().firstOrNull { it.kind == categoryKind }?.id.orEmpty()
             }
             loaded = true
         }
@@ -138,10 +152,10 @@ class ExpenseEditViewModel(
 
     fun save() = action {
         require(title.isNotBlank()) { "Enter a title" }
-        val currency = repo.getBook(bookId)?.currency ?: "INR"
-        val minor = Money.parse(amount, currency) ?: throw IllegalArgumentException("Enter a valid amount")
-        require(paidBy.isNotEmpty()) { "Select who paid" }
-        require(splitWith.isNotEmpty()) { "Select who shares this expense" }
+        val minor = Money.parse(amount) ?: throw IllegalArgumentException("Enter a valid amount in ₹")
+        require(paidBy.isNotEmpty()) { if (type == ExpenseType.INCOME) "Select who received it" else "Select who paid" }
+        require(type == ExpenseType.INCOME || splitWith.isNotEmpty()) { "Select who shares this expense" }
+        require(type == ExpenseType.SETTLEMENT || categoryId.isNotEmpty()) { "Choose a category" }
         val base = existing
         val finalReceipt = newReceipt?.let { repo.importReceipt(it) } ?: receiptPath
         val now = System.currentTimeMillis()
@@ -151,11 +165,11 @@ class ExpenseEditViewModel(
                 bookId = bookId,
                 title = title.trim(),
                 amountMinor = minor,
-                category = category.name,
+                categoryId = categoryId,
                 date = date,
                 paidBy = paidBy,
-                splitWith = splitWith.sorted(),
-                type = base?.type ?: ExpenseType.EXPENSE,
+                splitWith = if (type == ExpenseType.INCOME) emptyList() else splitWith.sorted(),
+                type = type,
                 note = note.trim(),
                 receiptPath = finalReceipt,
                 createdAt = base?.createdAt ?: now,
@@ -173,10 +187,10 @@ class ExpenseEditViewModel(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun ExpenseEditScreen(bookId: String, expenseId: String?, onDone: () -> Unit) {
-    val vm = appViewModel { ExpenseEditViewModel(bookId, expenseId, it) }
+fun EntryEditScreen(bookId: String, entryId: String?, kind: EntryKind, onDone: () -> Unit) {
+    val vm = appViewModel { EntryEditViewModel(bookId, entryId, kind, it) }
     val members by vm.members.collectAsStateWithLifecycle()
-    val book by vm.book.collectAsStateWithLifecycle()
+    val categories by vm.categories.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var showDatePicker by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -186,26 +200,25 @@ fun ExpenseEditScreen(bookId: String, expenseId: String?, onDone: () -> Unit) {
     MessageEffect(vm, snackbar)
     LaunchedEffect(vm.finished) { if (vm.finished) onDone() }
 
-    val isSettlement = vm.existing?.type == ExpenseType.SETTLEMENT
+    val isIncome = vm.type == ExpenseType.INCOME
+    val isSettlement = vm.type == ExpenseType.SETTLEMENT
+    val title = when {
+        isSettlement -> "Settlement"
+        vm.existing == null && isIncome -> "Add income"
+        vm.existing == null -> "Add expense"
+        isIncome -> "Edit income"
+        else -> "Edit expense"
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        when {
-                            isSettlement -> "Edit settlement"
-                            vm.existing == null -> "Add expense"
-                            else -> "Edit expense"
-                        },
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-                },
+            ScreenHeader(
+                title = title,
+                subtitle = "Amounts in ₹ INR",
+                navigation = { BackButton(onDone) },
                 actions = {
                     if (vm.existing != null) {
-                        IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, contentDescription = "Delete") }
+                        SquareIconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, contentDescription = "Delete") }
                     }
                 },
             )
@@ -220,23 +233,24 @@ fun ExpenseEditScreen(bookId: String, expenseId: String?, onDone: () -> Unit) {
                     .fillMaxSize()
                     .padding(padding)
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 OutlinedTextField(
-                    value = vm.title,
-                    onValueChange = { vm.title = it.take(MAX_TITLE) },
-                    label = { Text("Title") },
+                    value = vm.amount,
+                    onValueChange = { input -> vm.amount = input.filter { it.isDigit() || it == '.' }.take(12) },
+                    label = { Text("Amount") },
+                    prefix = { Text("₹ ") },
                     singleLine = true,
+                    textStyle = MaterialTheme.typography.headlineSmall,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
-                    value = vm.amount,
-                    onValueChange = { input -> vm.amount = input.filter { it.isDigit() || it == '.' || it == ',' }.take(15) },
-                    label = { Text("Amount") },
-                    suffix = { Text(book?.currency.orEmpty()) },
+                    value = vm.title,
+                    onValueChange = { vm.title = it.take(MAX_TITLE) },
+                    label = { Text(if (isIncome) "Source (e.g. October salary)" else "What was it for?") },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
@@ -247,36 +261,44 @@ fun ExpenseEditScreen(bookId: String, expenseId: String?, onDone: () -> Unit) {
 
                 if (!isSettlement) {
                     Label("Category")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Category.entries.forEach { item ->
-                            FilterChip(
-                                selected = vm.category == item,
-                                onClick = { vm.category = item },
-                                label = { Text("${item.emoji} ${item.label}") },
-                            )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        categories.filter { it.kind == vm.categoryKind }.forEach { category ->
+                            val selected = vm.categoryId == category.id
+                            Row(
+                                Modifier
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(
+                                        if (selected) Color(category.color).copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    )
+                                    .clickable { vm.categoryId = category.id }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(category.emoji)
+                                Spacer(Modifier.width(6.dp))
+                                Text(category.name, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                            }
                         }
                     }
                 }
 
-                Label("Paid by")
+                Label(if (isIncome) "Received by" else "Paid by")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     members.forEach { member ->
-                        FilterChip(
-                            selected = vm.paidBy == member.id,
-                            onClick = { vm.paidBy = member.id },
-                            label = { Text(member.name) },
-                        )
+                        FilterChip(selected = vm.paidBy == member.id, onClick = { vm.paidBy = member.id }, label = { Text(member.name) })
                     }
                 }
 
-                Label(if (isSettlement) "Paid to" else "Split equally between")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    members.forEach { member ->
-                        FilterChip(
-                            selected = member.id in vm.splitWith,
-                            onClick = { vm.toggleSplit(member.id) },
-                            label = { Text(member.name) },
-                        )
+                if (!isIncome) {
+                    Label(if (isSettlement) "Paid to" else "Split equally between")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        members.forEach { member ->
+                            FilterChip(
+                                selected = member.id in vm.splitWith,
+                                onClick = { vm.toggleSplit(member.id) },
+                                label = { Text(member.name) },
+                            )
+                        }
                     }
                 }
 
@@ -288,7 +310,7 @@ fun ExpenseEditScreen(bookId: String, expenseId: String?, onDone: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                if (!isSettlement) {
+                if (!isSettlement && !isIncome) {
                     Label("Receipt")
                     val preview: Any? = vm.newReceipt ?: vm.receiptPath?.let { File(it) }
                     if (preview != null) {
@@ -302,24 +324,24 @@ fun ExpenseEditScreen(bookId: String, expenseId: String?, onDone: () -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = {
                             picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        }) {
-                            Text(if (preview != null) "Replace photo" else "Attach photo")
-                        }
-                        if (preview != null) {
-                            TextButton(onClick = vm::removeReceipt) { Text("Remove") }
-                        }
+                        }) { Text(if (preview != null) "Replace photo" else "Attach photo") }
+                        if (preview != null) TextButton(onClick = vm::removeReceipt) { Text("Remove") }
                     }
                 }
 
-                Button(onClick = vm::save, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("Save") }
+                Button(
+                    onClick = vm::save,
+                    enabled = !vm.busy,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                ) { Text("Save", modifier = Modifier.padding(vertical = 6.dp), fontWeight = FontWeight.Bold) }
             }
         }
     }
 
     if (showDatePicker) {
-        val state = rememberDatePickerState(
-            initialSelectedDateMillis = vm.date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
-        )
+        val state = rememberDatePickerState(initialSelectedDateMillis = vm.date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
@@ -329,9 +351,7 @@ fun ExpenseEditScreen(bookId: String, expenseId: String?, onDone: () -> Unit) {
                 }) { Text("OK") }
             },
             dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } },
-        ) {
-            DatePicker(state = state)
-        }
+        ) { DatePicker(state = state) }
     }
 
     if (confirmDelete) {
@@ -347,5 +367,5 @@ fun ExpenseEditScreen(bookId: String, expenseId: String?, onDone: () -> Unit) {
 
 @Composable
 private fun Label(text: String) {
-    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
 }

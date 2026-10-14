@@ -23,18 +23,29 @@ class Converters {
 }
 
 @Database(
-    entities = [BookEntity::class, MemberEntity::class, ExpenseEntity::class],
-    version = 1,
+    entities = [
+        BookEntity::class,
+        MemberEntity::class,
+        CategoryEntity::class,
+        ExpenseEntity::class,
+        ReminderEntity::class,
+    ],
+    version = 2,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
 abstract class MyBookDatabase : RoomDatabase() {
     abstract fun bookDao(): BookDao
     abstract fun memberDao(): MemberDao
+    abstract fun categoryDao(): CategoryDao
     abstract fun expenseDao(): ExpenseDao
+    abstract fun reminderDao(): ReminderDao
 
     companion object {
+        // POC: schema changes reset local data instead of migrating it.
         fun create(context: Context): MyBookDatabase =
-            Room.databaseBuilder(context, MyBookDatabase::class.java, "mybook.db").build()
+            Room.databaseBuilder(context, MyBookDatabase::class.java, "mybook.db")
+                .fallbackToDestructiveMigration()
+                .build()
     }
 }

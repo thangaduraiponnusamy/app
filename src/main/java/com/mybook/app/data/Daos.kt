@@ -42,6 +42,27 @@ interface MemberDao {
 }
 
 @Dao
+interface CategoryDao {
+    @Query("SELECT * FROM categories ORDER BY sortOrder, name COLLATE NOCASE")
+    fun observeAll(): Flow<List<CategoryEntity>>
+
+    @Query("SELECT * FROM categories ORDER BY sortOrder, name COLLATE NOCASE")
+    suspend fun list(): List<CategoryEntity>
+
+    @Query("SELECT COUNT(*) FROM categories")
+    suspend fun count(): Int
+
+    @Upsert
+    suspend fun upsert(category: CategoryEntity)
+
+    @Upsert
+    suspend fun upsertAll(categories: List<CategoryEntity>)
+
+    @Query("DELETE FROM categories WHERE id = :id")
+    suspend fun delete(id: String)
+}
+
+@Dao
 interface ExpenseDao {
     @Query("SELECT * FROM expenses WHERE bookId = :bookId ORDER BY date DESC, createdAt DESC")
     fun observe(bookId: String): Flow<List<ExpenseEntity>>
@@ -52,6 +73,9 @@ interface ExpenseDao {
     @Query("SELECT * FROM expenses WHERE id = :id")
     suspend fun get(id: String): ExpenseEntity?
 
+    @Query("SELECT COUNT(*) FROM expenses WHERE categoryId = :categoryId")
+    suspend fun countForCategory(categoryId: String): Int
+
     @Upsert
     suspend fun upsert(expense: ExpenseEntity)
 
@@ -59,5 +83,23 @@ interface ExpenseDao {
     suspend fun delete(id: String)
 
     @Query("DELETE FROM expenses WHERE bookId = :bookId")
+    suspend fun deleteForBook(bookId: String)
+}
+
+@Dao
+interface ReminderDao {
+    @Query("SELECT * FROM reminders WHERE bookId = :bookId ORDER BY dueDate")
+    fun observe(bookId: String): Flow<List<ReminderEntity>>
+
+    @Query("SELECT COUNT(*) FROM reminders WHERE categoryId = :categoryId")
+    suspend fun countForCategory(categoryId: String): Int
+
+    @Upsert
+    suspend fun upsert(reminder: ReminderEntity)
+
+    @Query("DELETE FROM reminders WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("DELETE FROM reminders WHERE bookId = :bookId")
     suspend fun deleteForBook(bookId: String)
 }

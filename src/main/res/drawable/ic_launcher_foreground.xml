@@ -9,16 +9,16 @@
         android:fillColor="#FFFFFFFF"
         android:pathData="M53,38 C46,33.5 37,33 30,35 L30,72 C37,70 46,70.5 53,75 Z" />
     <path
-        android:fillColor="#FFF3EEFF"
+        android:fillColor="#FFE0EAFF"
         android:pathData="M55,38 C62,33.5 71,33 78,35 L78,72 C71,70 62,70.5 55,75 Z" />
     <path
-        android:strokeColor="#FF8E7CFF"
+        android:strokeColor="#FF60A5FA"
         android:strokeWidth="2.2"
         android:strokeLineCap="round"
         android:pathData="M35,45 L48,46.5 M35,52 L48,53.5 M35,59 L44,60" />
     <!-- Rising trend line -->
     <path
-        android:strokeColor="#FFF25F9C"
+        android:strokeColor="#FF10B981"
         android:strokeWidth="2.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"

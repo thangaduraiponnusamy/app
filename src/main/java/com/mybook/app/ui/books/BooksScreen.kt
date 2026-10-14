@@ -11,10 +11,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,8 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -41,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -52,12 +50,13 @@ import com.mybook.app.data.BookEntity
 import com.mybook.app.data.BookRepository
 import com.mybook.app.data.Prefs
 import com.mybook.app.domain.MAX_NAME
-import com.mybook.app.domain.Money
 import com.mybook.app.ui.common.ActionViewModel
 import com.mybook.app.ui.common.Hint
 import com.mybook.app.ui.common.MessageEffect
+import com.mybook.app.ui.common.ScreenHeader
+import com.mybook.app.ui.common.SectionHeader
 import com.mybook.app.ui.common.appViewModel
-import com.mybook.app.ui.theme.BrandGradient
+import com.mybook.app.ui.theme.BlueGradient
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 
@@ -66,17 +65,15 @@ class BooksViewModel(private val repo: BookRepository, private val prefs: Prefs)
 
     fun open(id: String) = prefs.setActiveBook(id)
 
-    fun create(name: String, currency: String, membersText: String) = action {
+    fun create(name: String, membersText: String) = action {
         val cleanName = name.trim()
-        val cleanCurrency = currency.trim().uppercase()
         require(cleanName.isNotEmpty()) { "Enter a book name" }
-        require(Money.isValidCurrency(cleanCurrency)) { "Unknown currency code: $cleanCurrency" }
         val names = membersText.split(',')
             .map { it.trim().take(MAX_NAME) }
             .filter { it.isNotEmpty() }
             .distinctBy { it.lowercase() }
             .ifEmpty { listOf("Me") }
-        repo.createBook(cleanName.take(60), cleanCurrency, names)
+        repo.createBook(cleanName.take(60), names)
     }
 }
 
@@ -89,101 +86,87 @@ fun BooksScreen() {
     MessageEffect(vm, snackbar)
 
     Scaffold(
+        topBar = { ScreenHeader(title = "MyBook", subtitle = "Split, track & settle together") },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
+            FloatingActionButton(
                 onClick = { showCreate = true },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("New book") },
-            )
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+            ) { Icon(Icons.Filled.Add, contentDescription = "New book", tint = Color.White) }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        LazyColumn(
-            Modifier.fillMaxSize().padding(bottom = padding.calculateBottomPadding()),
-            contentPadding = PaddingValues(bottom = 96.dp),
-        ) {
-            item { Header() }
+        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 96.dp)) {
+            item { Hero() }
+            item { SectionHeader("Your books") }
             if (books.isEmpty()) {
-                item {
-                    Hint("No books yet. Create one for your home, flatmates or next trip, and add who shares the expenses.")
-                }
+                item { Hint("No books yet. Tap + to create one for your home, flatmates or next trip.") }
             }
-            items(books, key = { it.id }) { book -> BookCard(book) { vm.open(book.id) } }
+            items(books, key = { it.id }) { book -> BookRow(book) { vm.open(book.id) } }
         }
     }
 
     if (showCreate) {
         CreateBookDialog(
             onDismiss = { showCreate = false },
-            onCreate = { name, currency, members ->
+            onCreate = { name, members ->
                 showCreate = false
-                vm.create(name, currency, members)
+                vm.create(name, members)
             },
         )
     }
 }
 
 @Composable
-private fun Header() = Column {
+private fun Hero() {
     Box(
         Modifier
             .fillMaxWidth()
-            .background(BrandGradient, RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
-            .statusBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 28.dp),
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .background(BlueGradient)
+            .padding(24.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Image(painterResource(R.drawable.ic_logo), contentDescription = null, modifier = Modifier.size(64.dp))
             Spacer(Modifier.width(16.dp))
             Column {
-                Text("MyBook", style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Bold)
-                Text("Split, track & settle together", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.85f))
-            }
-        }
-    }
-    Spacer(Modifier.height(8.dp))
-    Text(
-        "Your books",
-        style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-    )
-}
-
-@Composable
-private fun BookCard(book: BookEntity, onClick: () -> Unit) {
-    Card(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-    ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(44.dp).background(BrandGradient, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
+                Text("Track every rupee", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
                 Text(
-                    book.name.take(1).uppercase(),
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    "Expenses, income, reminders and settle-ups in one place.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.85f),
                 )
             }
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
-                Text(book.name, style = MaterialTheme.typography.titleMedium)
-                Text(book.currency, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
         }
     }
 }
 
 @Composable
-private fun CreateBookDialog(onDismiss: () -> Unit, onCreate: (String, String, String) -> Unit) {
+private fun BookRow(book: BookEntity, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(44.dp).background(BlueGradient, CircleShape), contentAlignment = Alignment.Center) {
+            Text(book.name.take(1).uppercase(), color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.width(16.dp))
+        Text(book.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun CreateBookDialog(onDismiss: () -> Unit, onCreate: (String, String) -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
-    var currency by rememberSaveable { mutableStateOf(Money.DEFAULT_CURRENCY) }
-    var members by rememberSaveable { mutableStateOf("Me") }
+    var members by rememberSaveable { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("New book") },
@@ -196,23 +179,16 @@ private fun CreateBookDialog(onDismiss: () -> Unit, onCreate: (String, String, S
                     singleLine = true,
                 )
                 OutlinedTextField(
-                    value = currency,
-                    onValueChange = { currency = it.take(3).uppercase() },
-                    label = { Text("Currency (INR, EUR, USD...)") },
-                    singleLine = true,
-                )
-                OutlinedTextField(
                     value = members,
                     onValueChange = { members = it.take(400) },
                     label = { Text("Members, comma separated") },
-                    supportingText = { Text("e.g. Durai, Thanga") },
+                    placeholder = { Text("Durai, Thanga") },
+                    supportingText = { Text("e.g. Durai, Thanga · amounts are in ₹ INR") },
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onCreate(name, currency, members) }, enabled = name.isNotBlank() && currency.length == 3) {
-                Text("Create")
-            }
+            TextButton(onClick = { onCreate(name, members) }, enabled = name.isNotBlank()) { Text("Create") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

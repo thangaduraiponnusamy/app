@@ -1,86 +1,133 @@
 package com.mybook.app.domain
 
+import com.mybook.app.data.CategoryEntity
+import com.mybook.app.data.CategoryKind
 import com.mybook.app.data.ExpenseEntity
 import com.mybook.app.data.ExpenseType
 import java.io.OutputStream
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.NumberFormat
+import java.time.LocalDate
 import java.time.Month
+import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
-import java.util.Currency
 import java.util.Locale
+import java.util.UUID
+import kotlin.math.abs
 
 const val MAX_TITLE = 120
 const val MAX_NOTE = 500
 const val MAX_NAME = 40
 
-enum class Category(val label: String, val emoji: String) {
-    FOOD("Groceries", "🛒"),
-    DINING("Dining out", "🍽️"),
-    HOUSING("Rent & housing", "🏠"),
-    UTILITIES("Utilities", "💡"),
-    TRANSPORT("Transport", "🚗"),
-    HEALTH("Health", "💊"),
-    SHOPPING("Shopping", "🛍️"),
-    ENTERTAINMENT("Entertainment", "🎬"),
-    TRAVEL("Travel", "✈️"),
-    EDUCATION("Education", "📚"),
-    KIDS("Kids", "🧸"),
-    GIFTS("Gifts", "🎁"),
-    OTHER("Other", "📌");
+/** All amounts are INR, stored as Long paise to avoid floating point errors. */
+object Money {
+    private val india = Locale("en", "IN")
 
-    companion object {
-        fun from(name: String): Category = entries.firstOrNull { it.name == name } ?: OTHER
+    fun format(amountMinor: Long): String =
+        NumberFormat.getCurrencyInstance(india).format(BigDecimal.valueOf(amountMinor, 2))
+
+    /** Short form for tight spaces: ₹950, ₹3.2k, ₹4.5L, ₹1.2Cr. */
+    fun compact(amountMinor: Long): String {
+        val rupees = abs(amountMinor) / 100.0
+        val sign = if (amountMinor < 0) "-" else ""
+        val text = when {
+            rupees >= 1_00_00_000 -> "%.1fCr".format(Locale.US, rupees / 1_00_00_000)
+            rupees >= 1_00_000 -> "%.1fL".format(Locale.US, rupees / 1_00_000)
+            rupees >= 1_000 -> "%.1fk".format(Locale.US, rupees / 1_000)
+            else -> "%.0f".format(Locale.US, rupees)
+        }
+        return "$sign₹${text.replace(".0", "")}"
+    }
+
+    fun toPlain(amountMinor: Long): String = BigDecimal.valueOf(amountMinor, 2).toPlainString()
+
+    fun parse(input: String): Long? {
+        val normalized = input.trim().replace(",", "")
+        return runCatching {
+            BigDecimal(normalized).setScale(2, RoundingMode.HALF_UP).unscaledValue().longValueExact()
+        }.getOrNull()?.takeIf { it > 0 }
     }
 }
 
-/** Amounts are stored as Long minor units (e.g. paise/cents) to avoid floating point errors. */
-object Money {
-    const val DEFAULT_CURRENCY = "INR"
+object DefaultCategories {
+    private val expense = listOf(
+        Triple("Food", "🍔", 0xFF10B981),
+        Triple("Groceries", "🛒", 0xFF22C55E),
+        Triple("Transport", "🚗", 0xFFF59E0B),
+        Triple("Shopping", "🛍️", 0xFFEC4899),
+        Triple("Bills", "🧾", 0xFF3B82F6),
+        Triple("Rent", "🏠", 0xFF6366F1),
+        Triple("Health", "💊", 0xFFEF4444),
+        Triple("Entertainment", "🎬", 0xFF8B5CF6),
+        Triple("Travel", "✈️", 0xFF06B6D4),
+        Triple("Education", "📚", 0xFFA16207),
+        Triple("Gifts", "🎁", 0xFFF472B6),
+        Triple("Other", "📌", 0xFF94A3B8),
+    )
+    private val income = listOf(
+        Triple("Salary", "💼", 0xFF22C55E),
+        Triple("Business", "🏪", 0xFF3B82F6),
+        Triple("Rent received", "🏘️", 0xFF8B5CF6),
+        Triple("Interest", "📈", 0xFF06B6D4),
+        Triple("Gift", "🎁", 0xFFF472B6),
+        Triple("Other income", "💰", 0xFF94A3B8),
+    )
 
-    fun format(amountMinor: Long, currencyCode: String): String {
-        val currency = currencyOf(currencyCode)
-        val digits = digits(currency)
-        val formatter = NumberFormat.getCurrencyInstance().apply {
-            this.currency = currency
-            minimumFractionDigits = digits
-            maximumFractionDigits = digits
-        }
-        return formatter.format(BigDecimal.valueOf(amountMinor, digits))
+    fun all(): List<CategoryEntity> =
+        expense.mapIndexed { i, (name, emoji, color) -> category(name, emoji, color, CategoryKind.EXPENSE, i) } +
+            income.mapIndexed { i, (name, emoji, color) -> category(name, emoji, color, CategoryKind.INCOME, 100 + i) }
+
+    private fun category(name: String, emoji: String, color: Long, kind: CategoryKind, order: Int) =
+        CategoryEntity(UUID.randomUUID().toString(), name, emoji, color, kind, order)
+}
+
+/** Colours offered when creating or editing a category. */
+val CategoryPalette = listOf(
+    0xFF10B981, 0xFF22C55E, 0xFFF59E0B, 0xFFEF4444, 0xFFEC4899, 0xFF8B5CF6,
+    0xFF6366F1, 0xFF3B82F6, 0xFF06B6D4, 0xFFA16207, 0xFFF472B6, 0xFF94A3B8,
+)
+
+enum class Period(val label: String) {
+    WEEK("Week"),
+    MONTH("Month"),
+    YEAR("Year");
+
+    fun range(anchor: LocalDate): ClosedRange<LocalDate> = when (this) {
+        WEEK -> anchor.with(java.time.DayOfWeek.MONDAY).let { it..it.plusDays(6) }
+        MONTH -> anchor.withDayOfMonth(1)..anchor.withDayOfMonth(anchor.lengthOfMonth())
+        YEAR -> anchor.withDayOfYear(1)..anchor.withDayOfYear(anchor.lengthOfYear())
     }
 
-    fun toPlain(amountMinor: Long, currencyCode: String): String =
-        BigDecimal.valueOf(amountMinor, digits(currencyOf(currencyCode))).toPlainString()
-
-    fun parse(input: String, currencyCode: String): Long? {
-        val trimmed = input.trim()
-        val normalized = if (trimmed.contains('.')) trimmed.replace(",", "") else trimmed.replace(',', '.')
-        return runCatching {
-            BigDecimal(normalized)
-                .setScale(digits(currencyOf(currencyCode)), RoundingMode.HALF_UP)
-                .unscaledValue()
-                .longValueExact()
-        }.getOrNull()?.takeIf { it > 0 }
+    fun shift(anchor: LocalDate, delta: Long): LocalDate = when (this) {
+        WEEK -> anchor.plusWeeks(delta)
+        MONTH -> anchor.plusMonths(delta)
+        YEAR -> anchor.plusYears(delta)
     }
 
-    fun isValidCurrency(code: String): Boolean = runCatching { Currency.getInstance(code) }.isSuccess
+    fun title(anchor: LocalDate): String = when (this) {
+        WEEK -> range(anchor).let { "${it.start.format(DAY_MONTH)} – ${it.endInclusive.format(DAY_MONTH)}" }
+        MONTH -> anchor.format(MONTH_YEAR)
+        YEAR -> anchor.year.toString()
+    }
 
-    private fun currencyOf(code: String): Currency = runCatching { Currency.getInstance(code) }.getOrElse { Currency.getInstance(DEFAULT_CURRENCY) }
-
-    private fun digits(currency: Currency) = currency.defaultFractionDigits.coerceAtLeast(0)
+    private companion object {
+        val DAY_MONTH: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM")
+        val MONTH_YEAR: DateTimeFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
+    }
 }
 
 data class Transfer(val from: String, val to: String, val amountMinor: Long)
 
 object Balances {
-    /** Keyed by member id. Positive = gets money back; negative = owes. */
+    /** Keyed by member id. Positive = gets money back; negative = owes. Income is ignored. */
     fun compute(expenses: List<ExpenseEntity>): Map<String, Long> {
         val balances = mutableMapOf<String, Long>()
         fun add(memberId: String, amount: Long) {
             balances[memberId] = (balances[memberId] ?: 0L) + amount
         }
         for (expense in expenses) {
+            if (expense.type == ExpenseType.INCOME) continue
             val people = expense.splitWith.ifEmpty { listOf(expense.paidBy) }.sorted()
             add(expense.paidBy, expense.amountMinor)
             val share = expense.amountMinor / people.size
@@ -110,15 +157,23 @@ object Balances {
     }
 }
 
+data class CategoryTotal(val category: CategoryEntity?, val amountMinor: Long) {
+    val name: String get() = category?.name ?: "Uncategorised"
+    val emoji: String get() = category?.emoji ?: "📌"
+    val color: Long get() = category?.color ?: 0xFF94A3B8
+}
+
 object Reports {
     const val MIN_YEARS = 5
 
     fun spending(expenses: List<ExpenseEntity>) = expenses.filter { it.type == ExpenseType.EXPENSE }
 
-    fun byCategory(expenses: List<ExpenseEntity>): List<Pair<String, Long>> =
-        expenses.groupBy { Category.from(it.category) }
-            .map { (category, items) -> "${category.emoji} ${category.label}" to items.sumOf { it.amountMinor } }
-            .sortedByDescending { it.second }
+    fun income(expenses: List<ExpenseEntity>) = expenses.filter { it.type == ExpenseType.INCOME }
+
+    fun byCategory(expenses: List<ExpenseEntity>, categories: Map<String, CategoryEntity>): List<CategoryTotal> =
+        expenses.groupBy { it.categoryId }
+            .map { (id, items) -> CategoryTotal(categories[id], items.sumOf { it.amountMinor }) }
+            .sortedByDescending { it.amountMinor }
 
     fun byPayer(expenses: List<ExpenseEntity>, names: Map<String, String>): List<Pair<String, Long>> =
         expenses.groupBy { names[it.paidBy] ?: "Unknown" }
@@ -131,7 +186,7 @@ object Reports {
                 expenses.filter { it.date.year == year && it.date.monthValue == month }.sumOf { it.amountMinor }
         }
 
-    /** At least the last [MIN_YEARS] years, extended back to the oldest expense. */
+    /** At least the last [MIN_YEARS] years, extended back to the oldest entry. */
     fun yearRange(expenses: List<ExpenseEntity>, currentYear: Int): IntRange {
         val oldest = expenses.minOfOrNull { it.date.year } ?: currentYear
         return minOf(oldest, currentYear - MIN_YEARS + 1)..currentYear
@@ -142,11 +197,16 @@ object Reports {
 }
 
 object CsvExporter {
-    fun write(out: OutputStream, expenses: List<ExpenseEntity>, currency: String, names: Map<String, String>) {
+    fun write(
+        out: OutputStream,
+        expenses: List<ExpenseEntity>,
+        names: Map<String, String>,
+        categories: Map<String, String>,
+    ) {
         val writer = out.bufferedWriter(Charsets.UTF_8)
         writer.write("\uFEFF") // BOM so Excel detects UTF-8
         writer.write(
-            listOf("Date", "Year", "Month", "Type", "Title", "Category", "Amount", "Currency", "Paid by", "Split with", "Note", "Receipt")
+            listOf("Date", "Year", "Month", "Type", "Title", "Category", "Amount (INR)", "Paid / received by", "Split with", "Note", "Receipt")
                 .joinToString(","),
         )
         writer.newLine()
@@ -157,9 +217,8 @@ object CsvExporter {
                 e.date.monthValue.toString(),
                 e.type.name.lowercase(),
                 text(e.title),
-                Category.from(e.category).label,
-                Money.toPlain(e.amountMinor, currency),
-                currency,
+                text(categories[e.categoryId].orEmpty()),
+                Money.toPlain(e.amountMinor),
                 text(names[e.paidBy].orEmpty()),
                 text(e.splitWith.joinToString("; ") { names[it].orEmpty() }),
                 text(e.note),
