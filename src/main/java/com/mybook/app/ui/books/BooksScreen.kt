@@ -20,9 +20,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -75,6 +77,11 @@ class BooksViewModel(private val repo: BookRepository, private val prefs: Prefs)
             .ifEmpty { listOf("Me") }
         repo.createBook(cleanName.take(60), names)
     }
+
+    fun rename(book: BookEntity, name: String) = action {
+        repo.renameBook(book.id, name)
+        message = "Renamed to ${name.trim()}"
+    }
 }
 
 @Composable
@@ -82,6 +89,7 @@ fun BooksScreen() {
     val vm = appViewModel { BooksViewModel(it.repository, it.prefs) }
     val books by vm.books.collectAsStateWithLifecycle()
     var showCreate by rememberSaveable { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf<BookEntity?>(null) }
     val snackbar = remember { SnackbarHostState() }
     MessageEffect(vm, snackbar)
 
@@ -102,8 +110,19 @@ fun BooksScreen() {
             if (books.isEmpty()) {
                 item { Hint("No books yet. Tap + to create one for your home, flatmates or next trip.") }
             }
-            items(books, key = { it.id }) { book -> BookRow(book) { vm.open(book.id) } }
+            items(books, key = { it.id }) { book -> BookRow(book, onRename = { renaming = book }) { vm.open(book.id) } }
         }
+    }
+
+    renaming?.let { book ->
+        RenameBookDialog(
+            currentName = book.name,
+            onDismiss = { renaming = null },
+            onSave = { name ->
+                renaming = null
+                vm.rename(book, name)
+            },
+        )
     }
 
     if (showCreate) {
@@ -143,7 +162,7 @@ private fun Hero() {
 }
 
 @Composable
-private fun BookRow(book: BookEntity, onClick: () -> Unit) {
+private fun BookRow(book: BookEntity, onRename: () -> Unit, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -151,7 +170,7 @@ private fun BookRow(book: BookEntity, onClick: () -> Unit) {
             .clip(RoundedCornerShape(20.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(onClick = onClick)
-            .padding(16.dp),
+            .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(44.dp).background(BrandGradient, CircleShape), contentAlignment = Alignment.Center) {
@@ -159,8 +178,32 @@ private fun BookRow(book: BookEntity, onClick: () -> Unit) {
         }
         Spacer(Modifier.width(16.dp))
         Text(book.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        IconButton(onClick = onRename) {
+            Icon(Icons.Filled.Edit, contentDescription = "Rename ${book.name}", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
+}
+
+/** Shared by the book list and the book menu. */
+@Composable
+fun RenameBookDialog(currentName: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var name by rememberSaveable { mutableStateOf(currentName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename book") },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it.take(60) },
+                label = { Text("Book name") },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(name) }, enabled = name.isNotBlank() && name.trim() != currentName) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

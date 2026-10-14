@@ -6,8 +6,6 @@ import com.mybook.app.data.BookRepository
 import com.mybook.app.data.MyBookDatabase
 import com.mybook.app.data.Prefs
 import com.mybook.app.data.backup.BackupManager
-import com.mybook.app.data.backup.DriveBackupClient
-import com.mybook.app.data.backup.GoogleDriveAuth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,7 +34,7 @@ class AppContainer(context: Context) {
         prefs = prefs,
         receiptsDir = File(appContext.filesDir, "receipts"),
     )
-    val backupManager = BackupManager(appContext, database, prefs, GoogleDriveAuth(appContext), DriveBackupClient())
+    val backupManager = BackupManager(appContext, database, prefs)
 
     init {
         appScope.launch { repository.ensureDefaultCategories() }

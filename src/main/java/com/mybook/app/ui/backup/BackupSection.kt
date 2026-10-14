@@ -1,20 +1,14 @@
 package com.mybook.app.ui.backup
 
-import android.app.Activity
-import android.app.PendingIntent
-import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -26,7 +20,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,12 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mybook.app.AppContainer
 import com.mybook.app.data.BackupFrequency
-import com.mybook.app.data.backup.ConsentRequiredException
+import com.mybook.app.data.backup.BackupManager
 import com.mybook.app.ui.common.ActionViewModel
 import com.mybook.app.ui.common.MessageEffect
 import com.mybook.app.ui.common.appViewModel
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.receiveAsFlow
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -51,36 +42,17 @@ import java.time.format.DateTimeFormatter
 class BackupViewModel(container: AppContainer) : ActionViewModel() {
     private val prefs = container.prefs
     private val backup = container.backupManager
-    private val consent = Channel<PendingIntent>(Channel.BUFFERED)
-    private var afterConsent: (suspend () -> Unit)? = null
 
-    val email = prefs.backupEmail
+    val location = prefs.backupLocationName
+    val locationUri = prefs.backupUri
     val frequency = prefs.backupFrequency
     val lastBackupAt = prefs.lastBackupAt
-    val consentRequests = consent.receiveAsFlow()
 
-    fun connect() = action {
-        val result = backup.auth.authorize(null)
-        val pending = result.pendingIntent
-        if (result.hasResolution() && pending != null) {
-            afterConsent = null
-            consent.send(pending)
-        } else {
-            finishConnect(result.accessToken)
-        }
-    }
-
-    fun onConsentResult(data: Intent?) = action {
-        val result = backup.auth.resultFromIntent(data)
-        val next = afterConsent
-        afterConsent = null
-        if (next != null) next() else finishConnect(result.accessToken)
-    }
-
-    fun disconnect() {
-        prefs.setBackupEmail(null)
-        backup.applySchedule()
-        message = "Google Drive backup turned off"
+    fun chooseLocation(uri: Uri) = action {
+        backup.setLocation(uri)
+        if (prefs.backupFrequency.value == BackupFrequency.OFF) setFrequency(BackupFrequency.DAILY)
+        backup.backupNow()
+        message = "Backed up. MyBook will keep this file updated."
     }
 
     fun setFrequency(value: BackupFrequency) {
@@ -88,56 +60,42 @@ class BackupViewModel(container: AppContainer) : ActionViewModel() {
         backup.applySchedule()
     }
 
-    fun backupNow() = withConsent {
+    fun backupNow() = action {
         backup.backupNow()
-        message = "Backed up to Google Drive"
+        message = "Backup saved"
     }
 
-    fun restore() = withConsent {
-        val account = prefs.backupEmail.value ?: error("Choose a Google account first")
-        backup.restore(account)
+    fun restore(uri: Uri) = action {
+        backup.restore(uri)
         prefs.setRestoreDecided(true)
         backup.restartApp()
     }
 
-    private suspend fun finishConnect(token: String?) {
-        val accessToken = token ?: error("Google did not grant Drive access")
-        val account = backup.drive.email(accessToken) ?: error("Could not read your Google account")
-        prefs.setBackupEmail(account)
-        if (prefs.backupFrequency.value == BackupFrequency.OFF) prefs.setBackupFrequency(BackupFrequency.DAILY)
-        backup.applySchedule()
-        message = "Backups will be saved to $account"
-    }
-
-    private fun withConsent(block: suspend () -> Unit) = action {
-        try {
-            block()
-        } catch (e: ConsentRequiredException) {
-            val pending = e.pendingIntent ?: throw e
-            afterConsent = block
-            consent.send(pending)
-        }
+    fun turnOff() {
+        backup.clearLocation()
+        message = "Automatic backup turned off"
     }
 }
 
 private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a")
 
-/** Google Drive backup settings, shown on the Admin page. */
+/** Backup settings for the Admin page. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BackupSection(snackbar: SnackbarHostState) {
     val vm = appViewModel { BackupViewModel(it) }
-    val email by vm.email.collectAsStateWithLifecycle()
+    val location by vm.location.collectAsStateWithLifecycle()
+    val locationUri by vm.locationUri.collectAsStateWithLifecycle()
     val frequency by vm.frequency.collectAsStateWithLifecycle()
     val lastBackupAt by vm.lastBackupAt.collectAsStateWithLifecycle()
-    var confirmRestore by remember { mutableStateOf(false) }
+    var restoreUri by remember { mutableStateOf<Uri?>(null) }
     MessageEffect(vm, snackbar)
 
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) vm.onConsentResult(result.data)
+    val createFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri != null) vm.chooseLocation(uri)
     }
-    LaunchedEffect(vm) {
-        vm.consentRequests.collect { launcher.launch(IntentSenderRequest.Builder(it.intentSender).build()) }
+    val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) restoreUri = uri
     }
 
     Column(
@@ -149,18 +107,18 @@ fun BackupSection(snackbar: SnackbarHostState) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("☁️ Google Drive backup", fontWeight = FontWeight.Bold)
-        val account = email
-        if (account == null) {
-            Text(
-                "Back up all books, entries and receipts to your Google Drive, like WhatsApp. " +
-                    "After reinstalling, MyBook restores them automatically.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(onClick = vm::connect, enabled = !vm.busy) { Text("Choose Google account") }
-        } else {
-            Text("Account: $account", style = MaterialTheme.typography.bodyMedium)
+        Text("☁️ Backup to Google Drive", fontWeight = FontWeight.Bold)
+        Text(
+            if (locationUri == null) {
+                "Tap \"Choose backup location\", pick Google Drive in the menu, then your account and folder. " +
+                    "MyBook keeps that file updated automatically."
+            } else {
+                "Saving to: ${location ?: BackupManager.FILE_NAME}"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (locationUri != null) {
             Text(
                 if (lastBackupAt > 0) {
                     "Last backup: " + Instant.ofEpochMilli(lastBackupAt).atZone(ZoneId.systemDefault()).format(TIME_FORMAT)
@@ -168,30 +126,38 @@ fun BackupSection(snackbar: SnackbarHostState) {
                     "No backup yet"
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(2.dp))
-            Text("Back up automatically", style = MaterialTheme.typography.labelLarge)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                BackupFrequency.entries.forEach { option ->
-                    FilterChip(selected = frequency == option, onClick = { vm.setFrequency(option) }, label = { Text(option.label) })
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = vm::backupNow, enabled = !vm.busy) { Text(if (vm.busy) "Working…" else "Back up now") }
-                OutlinedButton(onClick = { confirmRestore = true }, enabled = !vm.busy) { Text("Restore") }
-            }
-            TextButton(onClick = vm::disconnect) { Text("Turn off Drive backup") }
         }
+
+        Text("Back up automatically", style = MaterialTheme.typography.labelLarge)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            BackupFrequency.entries.forEach { option ->
+                FilterChip(selected = frequency == option, onClick = { vm.setFrequency(option) }, label = { Text(option.label) })
+            }
+        }
+
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (locationUri == null) {
+                Button(onClick = { createFile.launch(BackupManager.FILE_NAME) }, enabled = !vm.busy) { Text("Choose backup location") }
+            } else {
+                Button(onClick = vm::backupNow, enabled = !vm.busy) { Text(if (vm.busy) "Working…" else "Back up now") }
+                OutlinedButton(onClick = { createFile.launch(BackupManager.FILE_NAME) }, enabled = !vm.busy) { Text("Change location") }
+            }
+        }
+        OutlinedButton(
+            onClick = { openFile.launch(arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed")) },
+            enabled = !vm.busy,
+        ) { Text("Restore from backup file") }
+        if (locationUri != null) TextButton(onClick = vm::turnOff) { Text("Turn off automatic backup") }
     }
 
-    if (confirmRestore) {
+    restoreUri?.let { uri ->
         AlertDialog(
-            onDismissRequest = { confirmRestore = false },
-            title = { Text("Restore from Google Drive?") },
-            text = { Text("All data on this phone is replaced with the backup from $email. The app restarts when done.") },
-            confirmButton = { TextButton(onClick = { confirmRestore = false; vm.restore() }) { Text("Restore") } },
-            dismissButton = { TextButton(onClick = { confirmRestore = false }) { Text("Cancel") } },
+            onDismissRequest = { restoreUri = null },
+            title = { Text("Restore this backup?") },
+            text = { Text("All data on this phone is replaced with the selected backup. The app restarts when done.") },
+            confirmButton = { TextButton(onClick = { restoreUri = null; vm.restore(uri) }) { Text("Restore") } },
+            dismissButton = { TextButton(onClick = { restoreUri = null }) { Text("Cancel") } },
         )
     }
 }

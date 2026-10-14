@@ -164,7 +164,10 @@ class EntryEditViewModel(
     }
 
     fun save() = action {
-        require(title.isNotBlank()) { "Enter a title" }
+        val categoryName = repo.listCategories().firstOrNull { it.id == categoryId }?.name
+        // Income has no separate title: it is named after its category (e.g. Salary).
+        val finalTitle = if (type == ExpenseType.INCOME) categoryName.orEmpty() else title.trim()
+        require(finalTitle.isNotBlank()) { if (type == ExpenseType.INCOME) "Choose a category" else "Enter a title" }
         val minor = Money.parse(amount) ?: throw IllegalArgumentException("Enter a valid amount in ₹")
         require(paidBy.isNotEmpty()) { if (type == ExpenseType.INCOME) "Select who received it" else "Select who paid" }
         val shares = when {
@@ -181,7 +184,7 @@ class EntryEditViewModel(
             ExpenseEntity(
                 id = base?.id ?: UUID.randomUUID().toString(),
                 bookId = bookId,
-                title = title.trim(),
+                title = finalTitle,
                 amountMinor = minor,
                 categoryId = categoryId,
                 date = date,
@@ -265,13 +268,15 @@ fun EntryEditScreen(bookId: String, entryId: String?, kind: EntryKind, initialCa
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
-                    value = vm.title,
-                    onValueChange = { vm.title = it.take(MAX_TITLE) },
-                    label = { Text(if (isIncome) "Source (e.g. October salary)" else "What was it for?") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (!isIncome) {
+                    OutlinedTextField(
+                        value = vm.title,
+                        onValueChange = { vm.title = it.take(MAX_TITLE) },
+                        label = { Text("What was it for?") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.DateRange, contentDescription = null)
                     Spacer(Modifier.width(8.dp))

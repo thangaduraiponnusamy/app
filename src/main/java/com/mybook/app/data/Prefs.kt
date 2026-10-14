@@ -23,8 +23,11 @@ class Prefs(context: Context) {
     private val _activeBookId = MutableStateFlow(prefs.getString(KEY_ACTIVE_BOOK, null))
     val activeBookId: StateFlow<String?> = _activeBookId.asStateFlow()
 
-    private val _backupEmail = MutableStateFlow(prefs.getString(KEY_BACKUP_EMAIL, null))
-    val backupEmail: StateFlow<String?> = _backupEmail.asStateFlow()
+    private val _backupUri = MutableStateFlow(prefs.getString(KEY_BACKUP_URI, null))
+    val backupUri: StateFlow<String?> = _backupUri.asStateFlow()
+
+    private val _backupLocationName = MutableStateFlow(prefs.getString(KEY_BACKUP_NAME, null))
+    val backupLocationName: StateFlow<String?> = _backupLocationName.asStateFlow()
 
     private val _backupFrequency = MutableStateFlow(
         BackupFrequency.entries.firstOrNull { it.name == prefs.getString(KEY_BACKUP_FREQUENCY, null) } ?: BackupFrequency.DAILY,
@@ -41,9 +44,10 @@ class Prefs(context: Context) {
         _activeBookId.value = id
     }
 
-    fun setBackupEmail(email: String?) {
-        prefs.edit().putString(KEY_BACKUP_EMAIL, email).commit()
-        _backupEmail.value = email
+    fun setBackupLocation(uri: String?, name: String?) {
+        prefs.edit().putString(KEY_BACKUP_URI, uri).putString(KEY_BACKUP_NAME, name).commit()
+        _backupUri.value = uri
+        _backupLocationName.value = name
     }
 
     fun setBackupFrequency(frequency: BackupFrequency) {
@@ -63,7 +67,8 @@ class Prefs(context: Context) {
 
     private companion object {
         const val KEY_ACTIVE_BOOK = "active_book"
-        const val KEY_BACKUP_EMAIL = "backup_email"
+        const val KEY_BACKUP_URI = "backup_uri"
+        const val KEY_BACKUP_NAME = "backup_name"
         const val KEY_BACKUP_FREQUENCY = "backup_frequency"
         const val KEY_LAST_BACKUP = "last_backup_at"
         const val KEY_RESTORE_DECIDED = "restore_decided"

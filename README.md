@@ -12,11 +12,12 @@ Data lives on the phone (Room database), with optional **Google Drive backup** (
 
 ### Books & members
 - **Books** = separate ledgers (e.g. Home, Flatmates, Goa trip). Each has its own members (plain names, e.g. "Durai, Thanga").
+- **Rename book**: ✏️ on each book in the list, or ☰ menu → Rename book (names must be unique).
 - **Delete book** requires typing the exact book name (two-step confirmation so nothing is deleted by mistake).
 
 ### Home (Dashboard)
 - Gradient **Total Balance** card: Income ↙ / Expenses ↗ for the selected period.
-- **Week / Month / Year** pills with ‹ › navigation.
+- **Week / Month / Year** pills, then tap the period (📅 October 2026 ▾) to jump to any month (month grid with year switcher), any year, or any week (date picker). Same selector on Categories, Income, category and Reports screens.
 - **Spending donut**: centre shows "₹x SPENT"; **tap a slice (or legend item)** to see that category's emoji, name, amount and %.
 - **Last 5 recent transactions** with "See all".
 - Yellow banner when payments are due.
@@ -30,7 +31,8 @@ Data lives on the phone (Room database), with optional **Google Drive backup** (
 | **Reports** | Month / Year / All years (at least the last 5): net savings, monthly bar chart, by category, by payer. |
 
 ### Adding expenses & income
-- Amount (₹), title, date, category chips (with **"+ New"** to create a category inline), paid/received by.
+- Expense: amount (₹), title, date, category chips (with **"+ New"** to create a category inline), paid by.
+- Income: amount, date, category (Salary, Business…, also editable / "+ New"), received by. No separate source/title field: the entry is named after its category.
 - **Split is optional**: "Split with others" switch (off by default = payer's own expense). When on, choose who shares it equally.
 - Optional receipt photo (expenses only).
 
@@ -53,23 +55,18 @@ Data lives on the phone (Room database), with optional **Google Drive backup** (
 
 ---
 
-## Google Drive backup (like WhatsApp)
+## Backup to Google Drive (like WhatsApp, no setup needed)
 
-- Admin → **Choose Google account** → pick any Google account on the phone.
-- Backs up the database and receipts as `mybook-backup.zip` in Drive's **hidden app-data folder** (`drive.appdata` scope). It is not visible in normal Drive files and the app can't read your other Drive files.
-- **How often**: Off / 15 min / Hourly / Daily / Weekly / Monthly (WorkManager, Wi-Fi or mobile data). **Back up now** and **Restore** buttons.
+- Admin → **Choose backup location** → Android's "Save to" screen opens → pick **Google Drive** (or any folder) → choose account and folder → Save. MyBook creates `MyBook-backup.zip` (database + receipts) there and keeps write access.
+- **Back up automatically**: Off / 15 min / Hourly / Daily / Weekly / Monthly (always visible; WorkManager, needs network). **Back up now** and **Change location** buttons, last backup time.
+- **Restore from backup file** (Admin) → file picker → open Google Drive → pick `MyBook-backup.zip` → confirm → app restarts with the backup.
 - **After reinstall**:
-  - If Android restored MyBook's settings (it remembers the backup account), the Drive backup is **restored automatically**.
-  - Otherwise MyBook asks once: **"Restore from Google Drive"** or **"Skip, start fresh"**.
-- Android Auto Backup is also enabled (`allowBackup`). The device-only file `mybook_device.xml` (the "already asked about restore" flag) is excluded via `res/xml/backup_rules.xml` and `data_extraction_rules.xml`.
+  - Android Auto Backup (`allowBackup`) may restore everything automatically.
+  - If the app starts empty, MyBook asks once: **"Restore from Google Drive"** (opens the file picker) or **"Skip, start fresh"**.
+- No Google sign-in, OAuth or Google Cloud project is needed: the Drive app handles the account through Android's Storage Access Framework (persisted URI permission).
+- The device-only file `mybook_device.xml` (the "already asked about restore" flag) is excluded from Android backup via `res/xml/backup_rules.xml` and `data_extraction_rules.xml`.
 - Restored zip entries are validated (only `db/mybook.db` and `receipts/<file>`), which blocks zip-slip.
-
-### One-time Google Cloud setup (required for Drive backup)
-Google sign-in only works when the APK is signed with a **fixed key** whose SHA-1 is registered:
-1. https://console.cloud.google.com → create a project → **APIs & Services → Library → Google Drive API → Enable**.
-2. **OAuth consent screen**: External, app name "MyBook", add scope `.../auth/drive.appdata`, add your Gmail and family members' Gmails as **Test users**.
-3. **Credentials → Create credentials → OAuth client ID → Android**: package `com.mybook.app`, SHA-1 of the release key (below).
-4. Set up release signing (next section) so every build uses the same key.
+- History: a Google-account (Drive API, `drive.appdata`) version was tried first, but it needs a Google Cloud OAuth client and a fixed signing key. It was replaced by this file-based approach.
 
 ---
 
@@ -77,23 +74,19 @@ Google sign-in only works when the APK is signed with a **fixed key** whose SHA-
 
 The workflow `.github/workflows/build-apk.yml` runs on every push to `main` or manually (**Actions → Build APK → Run workflow**). Download the `mybook-apk-<n>` artifact (zip with the APK).
 
-- **Without signing secrets** → debug APK signed with a random key per build. Uninstall the previous build before installing (data is lost), and **Google Drive backup will not work**.
-- **With signing secrets** → release APK that installs over older versions, keeps data, and works with Google sign-in.
+- **Without signing secrets** → debug APK signed with a random key per build. Uninstall the previous build before installing (data is lost, so back up first and restore after).
+- **With signing secrets** → release APK that installs over older versions and keeps data.
 
 ### Release signing (one-time)
 1. Create a keystore on your PC (keep it safe and backed up):
    ```powershell
    keytool -genkeypair -v -keystore "$HOME\mybook-release.jks" -alias mybook -keyalg RSA -keysize 2048 -validity 10000
    ```
-2. SHA-1 for the Google Cloud Android client:
-   ```powershell
-   keytool -list -v -keystore "$HOME\mybook-release.jks" -alias mybook
-   ```
-3. Base64 to clipboard:
+2. Base64 to clipboard:
    ```powershell
    [Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\mybook-release.jks")) | Set-Clipboard
    ```
-4. GitHub repo → **Settings → Secrets and variables → Actions**:
+3. GitHub repo → **Settings → Secrets and variables → Actions**:
 
    | Secret | Value |
    |---|---|
@@ -116,15 +109,15 @@ src/main/java/com/mybook/app/
     Entities.kt             Book, Member, Category, Expense (type EXPENSE/SETTLEMENT/INCOME), Reminder
     Daos.kt, MyBookDatabase.kt   Room v4 (migrations 2→4 no-op, 3→4 drops the old sms_imports table; others destructive)
     BookRepository.kt       All data operations (books, members, categories, entries, reminders, CSV)
-    Prefs.kt                Active book, backup account/frequency/last time, device-only restore flag
-    backup/DriveBackup.kt   GoogleDriveAuth, DriveBackupClient (REST, appDataFolder), BackupManager (zip/restore/schedule), BackupWorker
+    Prefs.kt                Active book, backup location (URI + name)/frequency/last time, device-only restore flag
+    backup/BackupManager.kt Zip backup to a user-chosen document URI (SAF), restore from a picked file, WorkManager schedule, BackupWorker
   domain/
     Domain.kt               Money (INR, en-IN format, compact ₹3.2k/₹1.2L), DefaultCategories, Period, Balances, Reports, CsvExporter
   ui/
     MyBookRoot.kt           RestoreGate → Books list or per-book NavHost
     theme/Theme.kt          Light lavender (#F7F5FF), violet→pink gradient, white cards
-    common/                 ScreenHeader, SquareIconButton, PeriodBar/Pills, CategoryBadge, TransactionRow, CategoryDialog
-    books/                  Book list + create dialog
+    common/                 ScreenHeader, SquareIconButton, PeriodBar/Pills + PeriodPickerDialog, CategoryBadge, TransactionRow, CategoryDialog
+    books/                  Book list + create/rename dialogs
     home/                   HomeScreen (menu, bell, tabs), DashboardTab (balance card, donut), CategoriesTab, IncomeTab, ReportsTab
     expenses/               EntryEditScreen (add/edit, optional split, inline category), CategoryEntriesScreen
     alerts/                 Payment reminders

@@ -1,10 +1,7 @@
 package com.mybook.app.ui.backup
 
-import android.app.Activity
-import android.app.PendingIntent
-import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -24,7 +21,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -37,84 +33,34 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import com.mybook.app.AppContainer
 import com.mybook.app.R
-import com.mybook.app.data.BackupFrequency
-import com.mybook.app.data.backup.ConsentRequiredException
 import com.mybook.app.ui.common.ActionViewModel
 import com.mybook.app.ui.common.appViewModel
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import kotlin.coroutines.cancellation.CancellationException
 
 enum class StartupState { CHECKING, ASK, RESTORING, DONE }
 
-/** Decides on first launch whether to restore from Google Drive, like WhatsApp does after a reinstall. */
+/** On a fresh install with no books, offers to restore a backup once, like WhatsApp. */
 class StartupViewModel(container: AppContainer) : ActionViewModel() {
     private val prefs = container.prefs
     private val repo = container.repository
     private val backup = container.backupManager
-    private val consent = Channel<PendingIntent>(Channel.BUFFERED)
 
     var state by mutableStateOf(StartupState.CHECKING)
         private set
-    var account by mutableStateOf<String?>(null)
-        private set
-    val consentRequests = consent.receiveAsFlow()
 
     init {
-        viewModelScope.launch { decide() }
-    }
-
-    private suspend fun decide() {
-        if (prefs.restoreDecided || repo.hasBooks()) {
-            finish()
-            return
-        }
-        // Account remembered by Android's own backup after a reinstall: restore without asking.
-        val email = prefs.backupEmail.value
-        if (email == null) {
-            state = StartupState.ASK
-            return
-        }
-        account = email
-        try {
-            if (backup.findBackup(email) == null) finish() else restoreAndRestart(email)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            state = StartupState.ASK
-            if (e !is ConsentRequiredException) message = e.message
+        viewModelScope.launch {
+            // Android's own backup may already have restored the database after a reinstall.
+            if (prefs.restoreDecided || repo.hasBooks()) finish() else state = StartupState.ASK
         }
     }
 
     fun skip() = finish()
 
-    fun restoreFromDrive() = action {
-        val result = backup.auth.authorize(account)
-        val pending = result.pendingIntent
-        if (result.hasResolution() && pending != null) consent.send(pending) else afterAuthorized(result.accessToken)
-    }
-
-    fun onConsentResult(data: Intent?) = action { afterAuthorized(backup.auth.resultFromIntent(data).accessToken) }
-
-    private suspend fun afterAuthorized(token: String?) {
-        val accessToken = token ?: error("Google did not grant Drive access")
-        val email = backup.drive.email(accessToken) ?: error("Could not read your Google account")
-        account = email
-        prefs.setBackupEmail(email)
-        if (prefs.backupFrequency.value == BackupFrequency.OFF) prefs.setBackupFrequency(BackupFrequency.DAILY)
-        backup.applySchedule()
-        if (backup.drive.find(accessToken) == null) {
-            message = "No MyBook backup found in $email. Tap Skip to start fresh."
-            return
-        }
-        restoreAndRestart(email)
-    }
-
-    private suspend fun restoreAndRestart(email: String) {
+    fun restore(uri: Uri) = action {
         state = StartupState.RESTORING
         try {
-            backup.restore(email)
+            backup.restore(uri)
         } catch (e: Exception) {
             state = StartupState.ASK
             throw e
@@ -133,13 +79,6 @@ class StartupViewModel(container: AppContainer) : ActionViewModel() {
 @Composable
 fun RestoreGate(content: @Composable () -> Unit) {
     val vm = appViewModel { StartupViewModel(it) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) vm.onConsentResult(result.data)
-    }
-    LaunchedEffect(vm) {
-        vm.consentRequests.collect { launcher.launch(IntentSenderRequest.Builder(it.intentSender).build()) }
-    }
-
     when (vm.state) {
         StartupState.DONE -> content()
         StartupState.CHECKING -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -150,6 +89,9 @@ fun RestoreGate(content: @Composable () -> Unit) {
 @Composable
 private fun RestorePrompt(vm: StartupViewModel) {
     val restoring = vm.state == StartupState.RESTORING || vm.busy
+    val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.restore(uri)
+    }
     Column(
         Modifier.fillMaxSize().systemBarsPadding().padding(32.dp),
         verticalArrangement = Arrangement.Center,
@@ -161,10 +103,10 @@ private fun RestorePrompt(vm: StartupViewModel) {
         Spacer(Modifier.height(8.dp))
         Text(
             if (restoring) {
-                "Restoring from ${vm.account ?: "Google Drive"}… Please keep the app open."
+                "Restoring your backup… Please keep the app open."
             } else {
-                "If you backed up MyBook to Google Drive before, restore your books, entries and receipts now. " +
-                    "You can also restore later from Admin."
+                "If you backed up MyBook before, tap Restore, open Google Drive in the file picker and choose " +
+                    "MyBook-backup.zip. You can also restore later from Admin."
             },
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -173,7 +115,11 @@ private fun RestorePrompt(vm: StartupViewModel) {
         if (restoring) {
             CircularProgressIndicator()
         } else {
-            Button(onClick = vm::restoreFromDrive, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = { openFile.launch(arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed")) },
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Text("Restore from Google Drive", modifier = Modifier.padding(vertical = 6.dp), fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(8.dp))

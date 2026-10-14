@@ -9,6 +9,7 @@ import com.mybook.app.domain.DefaultCategories
 import com.mybook.app.domain.MAX_NAME
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalDate
@@ -49,6 +50,16 @@ class BookRepository(
             memberNames.forEach { members.upsert(MemberEntity(UUID.randomUUID().toString(), bookId, it)) }
         }
         prefs.setActiveBook(bookId)
+    }
+
+    /** Renames a book; names must be unique so books are easy to tell apart. */
+    suspend fun renameBook(id: String, name: String) {
+        val clean = name.trim().take(60)
+        require(clean.isNotEmpty()) { "Enter a book name" }
+        val book = books.get(id) ?: error("Book not found")
+        val others = books.observeAll().first().filter { it.id != id }
+        require(others.none { it.name.equals(clean, ignoreCase = true) }) { "A book named $clean already exists" }
+        books.upsert(book.copy(name = clean))
     }
 
     suspend fun deleteBook(id: String) {

@@ -12,9 +12,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,8 +39,10 @@ import androidx.compose.ui.unit.dp
 import com.mybook.app.data.CategoryEntity
 import com.mybook.app.data.ExpenseEntity
 import com.mybook.app.domain.Money
+import com.mybook.app.domain.Period
 import com.mybook.app.domain.Reports
 import com.mybook.app.ui.common.Hint
+import com.mybook.app.ui.common.PeriodPickerDialog
 import com.mybook.app.ui.common.SectionHeader
 import com.mybook.app.ui.theme.BrandGradient
 import com.mybook.app.ui.theme.BrandPink
@@ -50,6 +56,7 @@ private enum class ReportMode(val label: String) { MONTH("Month"), YEAR("Year"),
 fun ReportsTab(entries: List<ExpenseEntity>, categories: List<CategoryEntity>, names: Map<String, String>) {
     var mode by rememberSaveable { mutableStateOf(ReportMode.YEAR) }
     var anchor by rememberSaveable { mutableStateOf(LocalDate.now()) }
+    var picking by remember { mutableStateOf(false) }
     val today = LocalDate.now()
     val categoryMap = remember(categories) { categories.associateBy { it.id } }
     val inPeriod = remember(entries, mode, anchor) {
@@ -83,21 +90,27 @@ fun ReportsTab(entries: List<ExpenseEntity>, categories: List<CategoryEntity>, n
             }
         }
         if (mode != ReportMode.YEARS) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("‹", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.clickable {
-                    anchor = if (mode == ReportMode.MONTH) anchor.minusMonths(1) else anchor.minusYears(1)
-                }.padding(8.dp))
-                Text(
-                    if (mode == ReportMode.MONTH) "${anchor.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${anchor.year}" else anchor.year.toString(),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center,
+            val pickerPeriod = if (mode == ReportMode.MONTH) Period.MONTH else Period.YEAR
+            Row(
+                Modifier
+                    .padding(horizontal = 20.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .clickable { picking = true }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("📅  ${pickerPeriod.title(anchor)}", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(6.dp))
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = "Choose period")
+            }
+            if (picking) {
+                PeriodPickerDialog(
+                    period = pickerPeriod,
+                    anchor = anchor,
+                    onDismiss = { picking = false },
+                    onPick = { picking = false; anchor = it },
                 )
-                val nextAllowed = if (mode == ReportMode.MONTH) anchor.withDayOfMonth(1) < today.withDayOfMonth(1) else anchor.year < today.year
-                Text("›", style = MaterialTheme.typography.headlineSmall, color = if (nextAllowed) Color.Unspecified else MaterialTheme.colorScheme.outline, modifier = Modifier.clickable(enabled = nextAllowed) {
-                    anchor = if (mode == ReportMode.MONTH) anchor.plusMonths(1) else anchor.plusYears(1)
-                }.padding(8.dp))
             }
         }
 

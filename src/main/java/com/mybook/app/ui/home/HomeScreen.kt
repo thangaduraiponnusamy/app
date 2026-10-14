@@ -51,6 +51,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.mybook.app.AppContainer
 import com.mybook.app.domain.Period
+import com.mybook.app.ui.books.RenameBookDialog
 import com.mybook.app.ui.common.ActionViewModel
 import com.mybook.app.ui.common.MessageEffect
 import com.mybook.app.ui.common.ScreenHeader
@@ -98,6 +99,11 @@ class HomeViewModel(private val bookId: String, private val container: AppContai
 
     fun switchBook() = container.prefs.setActiveBook(null)
 
+    fun rename(name: String) = action {
+        repo.renameBook(bookId, name)
+        message = "Renamed to ${name.trim()}"
+    }
+
     fun deleteBook() = action { repo.deleteBook(bookId) }
 }
 
@@ -122,6 +128,7 @@ fun HomeScreen(bookId: String, nav: HomeNav) {
     var anchor by rememberSaveable { mutableStateOf(LocalDate.now()) }
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     MessageEffect(vm, snackbar)
 
@@ -155,6 +162,7 @@ fun HomeScreen(bookId: String, nav: HomeNav) {
                                     exportLauncher.launch("mybook-$safeName-${LocalDate.now()}.csv")
                                 },
                             )
+                            DropdownMenuItem(text = { Text("Rename book") }, onClick = { menuOpen = false; renaming = true })
                             DropdownMenuItem(text = { Text("Delete book") }, onClick = { menuOpen = false; confirmDelete = true })
                         }
                     }
@@ -236,6 +244,17 @@ fun HomeScreen(bookId: String, nav: HomeNav) {
                 HomeTab.REPORTS -> ReportsTab(entries, categories, names)
             }
         }
+    }
+
+    if (renaming) {
+        RenameBookDialog(
+            currentName = book?.name.orEmpty(),
+            onDismiss = { renaming = false },
+            onSave = { name ->
+                renaming = false
+                vm.rename(name)
+            },
+        )
     }
 
     if (confirmDelete) {
