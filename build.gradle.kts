@@ -2,7 +2,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
 }
 
@@ -10,11 +9,11 @@ plugins {
 val releaseKeystore = System.getenv("AURUM_KEYSTORE_PATH")?.let { file(it) }?.takeIf { it.exists() }
 
 android {
-    namespace = "com.aurum.expense"
+    namespace = "com.mybook.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.aurum.expense"
+        applicationId = "com.mybook.app"
         minSdk = 26
         targetSdk = 35
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
@@ -68,11 +67,6 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
-    implementation(libs.androidx.work.runtime.ktx)
-    implementation(libs.play.services.auth)
-    implementation(libs.kotlinx.coroutines.play.services)
-    implementation(libs.kotlinx.serialization.json)
-    implementation(libs.okhttp)
     implementation(libs.coil.compose)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

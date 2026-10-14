@@ -14,4 +14,4 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Aurum"
+rootProject.name = "MyBook"

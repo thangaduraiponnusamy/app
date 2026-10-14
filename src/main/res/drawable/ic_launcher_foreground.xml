@@ -4,11 +4,31 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Open ledger book -->
     <path
-        android:fillColor="#FFD54F"
-        android:pathData="M30,54 a24,24 0 1,0 48,0 a24,24 0 1,0 -48,0 Z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M53,38 C46,33.5 37,33 30,35 L30,72 C37,70 46,70.5 53,75 Z" />
     <path
-        android:fillColor="#7A5900"
-        android:fillType="evenOdd"
-        android:pathData="M54,38 L66,70 L61,70 L58,62 L50,62 L47,70 L42,70 Z M51.5,58 L56.5,58 L54,51 Z" />
+        android:fillColor="#FFF3EEFF"
+        android:pathData="M55,38 C62,33.5 71,33 78,35 L78,72 C71,70 62,70.5 55,75 Z" />
+    <path
+        android:strokeColor="#FF8E7CFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M35,45 L48,46.5 M35,52 L48,53.5 M35,59 L44,60" />
+    <!-- Rising trend line -->
+    <path
+        android:strokeColor="#FFF25F9C"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M59,62 L65,55 L69,58 L74,48 M70.5,48 L74,48 L74,51.5" />
+    <!-- Gold coin -->
+    <path
+        android:fillColor="#FFFFC83D"
+        android:pathData="M66,71 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 Z" />
+    <path
+        android:strokeColor="#FFF29F05"
+        android:strokeWidth="1.5"
+        android:pathData="M69,71 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0 Z" />
 </vector>

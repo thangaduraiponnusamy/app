@@ -29,7 +29,7 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.AURUM_KEYSTORE_BASE64 }}
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::warning::AURUM_KEYSTORE_BASE64 is not set - building a debug APK instead (Google sign-in will not match your OAuth client)."
+            echo "::warning::AURUM_KEYSTORE_BASE64 is not set - building a debug APK (uninstall the previous build before installing)."
             echo "BUILD_TYPE=debug" >> "$GITHUB_ENV"
             exit 0
           fi
@@ -49,11 +49,11 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p dist
-          cp build/outputs/apk/"$BUILD_TYPE"/*.apk "dist/aurum-1.0.${{ github.run_number }}-$BUILD_TYPE.apk"
+          cp build/outputs/apk/"$BUILD_TYPE"/*.apk "dist/mybook-1.0.${{ github.run_number }}-$BUILD_TYPE.apk"
 
       - uses: actions/upload-artifact@v5
         with:
-          name: aurum-apk-${{ github.run_number }}
+          name: mybook-apk-${{ github.run_number }}
           path: dist/*.apk
           if-no-files-found: error
 
